@@ -174,3 +174,21 @@
 [2026-11-21T18:44:51.168Z] [INFO] log Shutdown request received from client editor-25076-dx0xw2
 [2026-11-21T18:44:51.168Z] [INFO] log Unity client requested immediate shutdown - shutting down now, reason: Shutdown requested by client
 [2026-11-21T18:44:51.169Z] [INFO] log Shutdown: Initiating graceful shutdown: Shutdown requested by client
+[2026-11-22T10:03:18.294Z] [INFO] relay.startup port=9001 mcpClientPort=9002 editorPid=9828
+[2026-11-22T10:03:18.298Z] [INFO] log === RELAY SERVER STARTED === (unity-ai-relay v1.0.12-build.100)
+[2026-11-22T10:03:18.341Z] [INFO] log TLS trust: NODE_USE_SYSTEM_CA=on systemCAs=381 bundledCAs=118
+[2026-11-22T10:03:18.341Z] [INFO] log Starting relay server...
+[2026-11-22T10:03:18.342Z] [INFO] log Command line arguments: ["bun","B:/~BUN/root/relay_win.exe","--relay","--port","9001","--mcp-client-port","9002","--editor-pid","9828","--shutdown-delay","180","--log-dir","E:\\Code\\GameDev4\\Final-Project_PARALATE\\PARALATE\\Logs"]
+[2026-11-22T10:03:18.342Z] [INFO] log Parsed config: {"port":9001,"mcpClientPort":9002,"editorPid":"9828","shutdownDelaySeconds":180}
+[2026-11-22T10:03:18.343Z] [INFO] log Initializing relay components...
+[2026-11-22T10:03:18.343Z] [INFO] log Creating RelayEditor...
+[2026-11-22T10:03:18.355Z] [INFO] log WebSocket server started
+[2026-11-22T10:03:18.355Z] [INFO] log Relay server initialization completed
+[2026-11-22T10:03:18.358Z] [INFO] log MCP Client initialized at port: 9002
+[2026-11-22T10:03:18.365Z] [WARN] log [shell-env] Shell environment did not contain a PATH variable
+[2026-11-22T10:03:18.368Z] [INFO] log Unity MCP Relay server started | Port: 9002 | Endpoints: /mcp/start-server, /mcp/stop-server, /mcp/server-status, /mcp/call-tool
+[2026-11-22T10:03:18.615Z] [INFO] log Unity client connected with ID: editor-9828-a3wisx (relay 1.0.12-build.100)
+[2026-11-22T10:03:18.616Z] [INFO] connection.established clientId=editor-9828-a3wisx port=9001
+[2026-11-22T10:05:07.845Z] [INFO] log Shutdown request received from client editor-9828-a3wisx
+[2026-11-22T10:05:07.845Z] [INFO] log Unity client requested immediate shutdown - shutting down now, reason: Shutdown requested by client
+[2026-11-22T10:05:07.846Z] [INFO] log Shutdown: Initiating graceful shutdown: Shutdown requested by client
