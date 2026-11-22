@@ -1,0 +1,19 @@
+using UnityEngine;
+
+[RequireComponent(typeof(Collider))]
+public class ItemPickup : MonoBehaviour, IInteractable
+{
+    public ItemData itemData;
+    public string PromptText => itemData != null ? itemData.promptText : "Press E to pick up";
+
+    public void Interact(GameObject interactor)
+    {
+        PickupSystem pickupSystem = interactor.GetComponent<PickupSystem>();
+        if (pickupSystem == null || !pickupSystem.PickUpObject(gameObject))
+            return; // เก็บไม่ได้ (เช่น มีอาวุธชนิดนี้อยู่แล้ว) จึงไม่เล่นเสียงเก็บของ
+
+        // เสียงเก็บของเสียงเดียวกันทั้งเกม (ถ้าไม่มีไฟล์ ใช้เสียงที่ตั้งไว้ใน ItemData)
+        if (!SfxLibrary.PlayPickup() && itemData != null)
+            AudioManager.PlayPickup(itemData.pickupSound, transform.position);
+    }
+}

@@ -1,0 +1,104 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+[RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
+public sealed class RoomZone : MonoBehaviour
+{
+    private readonly HashSet<AlertState> enemies = new HashSet<AlertState>();
+    private readonly HashSet<Transform> players = new HashSet<Transform>();
+    private static readonly Dictionary<AlertState, RoomZone> EnemyZones = new Dictionary<AlertState, RoomZone>();
+    private static readonly List<RoomZone> allZones = new List<RoomZone>();
+
+    public static RoomZone GetFor(Component member)
+    {
+        AlertState enemy = member == null ? null : member.GetComponent<AlertState>();
+        return enemy != null && EnemyZones.TryGetValue(enemy, out RoomZone zone) ? zone : null;
+    }
+
+    public static RoomZone GetAt(Vector3 position)
+    {
+        for (int i = 0; i < allZones.Count; i++)
+        {
+            RoomZone zone = allZones[i];
+            if (zone == null) continue;
+
+            BoxCollider box = zone.GetComponent<BoxCollider>();
+            if (box == null) continue;
+
+            Vector3 local = zone.transform.InverseTransformPoint(position) - box.center;
+            Vector3 halfExtents = Vector3.Scale(box.size * 0.5f, zone.transform.lossyScale);
+
+            if (Mathf.Abs(local.x) <= Mathf.Abs(halfExtents.x) &&
+                Mathf.Abs(local.y) <= Mathf.Abs(halfExtents.y) &&
+                Mathf.Abs(local.z) <= Mathf.Abs(halfExtents.z))
+            {
+                return zone;
+            }
+        }
+        return null;
+    }
+
+    private void OnEnable()
+    {
+        if (!allZones.Contains(this))
+            allZones.Add(this);
+    }
+
+    private void OnDisable()
+    {
+        allZones.Remove(this);
+    }
+
+    private void Awake()
+    {
+        BoxCollider box = GetComponent<BoxCollider>();
+        box.isTrigger = true;
+        Rigidbody body = GetComponent<Rigidbody>();
+        body.isKinematic = true;
+        body.useGravity = false;
+    }
+
+    private void Start()
+    {
+        BoxCollider box = GetComponent<BoxCollider>();
+        Vector3 center = transform.TransformPoint(box.center);
+        Vector3 halfExtents = Vector3.Scale(box.size * 0.5f, transform.lossyScale);
+        foreach (Collider occupant in Physics.OverlapBox(center, halfExtents, transform.rotation, ~0, QueryTriggerInteraction.Collide))
+        {
+            Register(occupant.GetComponentInParent<AlertState>());
+            if (occupant.CompareTag("Player")) players.Add(occupant.transform);
+        }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        Register(other.GetComponentInParent<AlertState>());
+        if (other.CompareTag("Player")) players.Add(other.transform);
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        AlertState enemy = other.GetComponentInParent<AlertState>();
+        if (enemy != null)
+        {
+            enemies.Remove(enemy);
+            if (EnemyZones.TryGetValue(enemy, out RoomZone zone) && zone == this) EnemyZones.Remove(enemy);
+        }
+        if (other.CompareTag("Player")) players.Remove(other.transform);
+    }
+
+    /// <summary>ศัตรูที่อยู่ในห้องนี้ (ใช้กับกล้องวงจรปิดที่เรียกศัตรูในห้อง)</summary>
+    public IReadOnlyCollection<AlertState> Enemies => enemies;
+
+    public void BroadcastAlert(AlertState sender, Vector3 sourcePosition)
+    {
+        foreach (AlertState enemy in enemies)
+            if (enemy != null && enemy != sender) enemy.ReceiveReinforcement(sourcePosition);
+    }
+
+    private void Register(AlertState enemy)
+    {
+        if (enemy != null) enemies.Add(enemy);
+        if (enemy != null) EnemyZones[enemy] = this;
+    }
+}

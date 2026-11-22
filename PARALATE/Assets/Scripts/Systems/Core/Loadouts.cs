@@ -1,0 +1,176 @@
+using System;
+using UnityEngine;
+
+/// <summary>
+/// ของที่ใส่อยู่ในแขน X-Gear 3 ช่อง (Passive / Active / Map) บันทึกลง PlayerPrefs จึงติดตัวไปทุกด่าน
+/// ใส่ชิป = หักออกจากคลัง 1 ชิ้น, ถอด = คืนเข้าคลัง (ของไม่หายและไม่ถูกทำซ้ำ)
+/// </summary>
+public static class XGearLoadout
+{
+    public static event Action OnChanged;
+
+    private const string PassiveKey = "XGear_Passive";
+    private const string ActiveKey = "XGear_Active";
+    private const string MapKey = "XGear_Map";
+
+    public static string PassiveId => PlayerPrefs.GetString(PassiveKey, string.Empty);
+    public static string ActiveId => PlayerPrefs.GetString(ActiveKey, string.Empty);
+    public static string MapId => PlayerPrefs.GetString(MapKey, string.Empty);
+
+    public static string Get(ItemCategory slot)
+    {
+        switch (slot)
+        {
+            case ItemCategory.PassiveChip: return PassiveId;
+            case ItemCategory.ActiveChip: return ActiveId;
+            case ItemCategory.MapData: return MapId;
+            default: return string.Empty;
+        }
+    }
+
+    private static string KeyOf(ItemCategory slot)
+    {
+        switch (slot)
+        {
+            case ItemCategory.PassiveChip: return PassiveKey;
+            case ItemCategory.ActiveChip: return ActiveKey;
+            case ItemCategory.MapData: return MapKey;
+            default: return null;
+        }
+    }
+
+    /// <summary>ใส่ไอเทมลงช่อง (id ว่าง = ถอด) คืน false ถ้าไม่มีของในคลังหรือชนิดไม่ตรงช่อง</summary>
+    public static bool Equip(ItemCategory slot, string itemId)
+    {
+        string key = KeyOf(slot);
+        if (key == null)
+            return false;
+
+        PersistentInventory inventory = PersistentInventory.Instance;
+        string current = Get(slot);
+
+        if (current == (itemId ?? string.Empty))
+            return true;
+
+        if (!string.IsNullOrEmpty(itemId))
+        {
+            ItemDef def = ItemCatalog.Get(itemId);
+            if (def == null || def.category != slot || inventory == null || !inventory.TrySpend(itemId, 1))
+                return false;
+        }
+
+        // คืนชิ้นเดิมเข้าคลัง
+        if (!string.IsNullOrEmpty(current) && inventory != null)
+            inventory.Add(current, 1);
+
+        PlayerPrefs.SetString(key, itemId ?? string.Empty);
+        PlayerPrefs.Save();
+        OnChanged?.Invoke();
+        return true;
+    }
+
+    /// <summary>ตั้งของในช่องตรงๆ โดยไม่หัก/คืนคลัง (ใช้ตอนโหลดเซฟ ที่คืนค่าคลังทั้งก้อนแยกอยู่แล้ว)</summary>
+    public static void SetRaw(string passive, string active, string map)
+    {
+        PlayerPrefs.SetString(PassiveKey, passive ?? string.Empty);
+        PlayerPrefs.SetString(ActiveKey, active ?? string.Empty);
+        PlayerPrefs.SetString(MapKey, map ?? string.Empty);
+        PlayerPrefs.Save();
+        OnChanged?.Invoke();
+    }
+
+    public static void ResetSave()
+    {
+        PlayerPrefs.DeleteKey(PassiveKey);
+        PlayerPrefs.DeleteKey(ActiveKey);
+        PlayerPrefs.DeleteKey(MapKey);
+    }
+}
+
+/// <summary>ระดับอัปเกรดของอาวุธแต่ละชนิด (อัปที่ Upgrade Corner ใน Base ด้วย Scrap) บันทึกลง PlayerPrefs</summary>
+public static class WeaponUpgrades
+{
+    public const int MaxLevel = 5;
+    public const float DamagePerLevel = 0.05f;      // ดาเมจ +5% ต่อระดับ
+    public const float ReloadSpeedPerLevel = 0.05f; // รีโหลดเร็วขึ้น +5% ต่อระดับ
+
+    public static readonly string[] WeaponKeys = { "AK47", "USP", "Sniper" };
+
+    private const string KeyPrefix = "WeaponLevel_";
+
+    public static string KeyOf(AmmoType type)
+    {
+        switch (type)
+        {
+            case AmmoType.Pistol: return "USP";
+            case AmmoType.Sniper: return "Sniper";
+            default: return "AK47";
+        }
+    }
+
+    public static int GetLevel(string weaponKey) => Mathf.Clamp(PlayerPrefs.GetInt(KeyPrefix + weaponKey, 0), 0, MaxLevel);
+
+    public static float DamageMultiplier(string weaponKey) => 1f + GetLevel(weaponKey) * DamagePerLevel;
+
+    public static float ReloadSpeedMultiplier(string weaponKey) => 1f + GetLevel(weaponKey) * ReloadSpeedPerLevel;
+
+    /// <summary>Scrap ที่ต้องใช้เพื่ออัปจากระดับปัจจุบันไประดับถัดไป</summary>
+    public static int NextCost(string weaponKey) => 2 * (GetLevel(weaponKey) + 1);
+
+    public static bool TryUpgrade(string weaponKey)
+    {
+        int level = GetLevel(weaponKey);
+        if (level >= MaxLevel || PersistentInventory.Instance == null)
+            return false;
+
+        if (!PersistentInventory.Instance.TrySpend(ItemCatalog.Scrap, NextCost(weaponKey)))
+            return false;
+
+        PlayerPrefs.SetInt(KeyPrefix + weaponKey, level + 1);
+        PlayerPrefs.Save();
+        return true;
+    }
+
+    public static void ResetSave()
+    {
+        for (int i = 0; i < WeaponKeys.Length; i++)
+            PlayerPrefs.DeleteKey(KeyPrefix + WeaponKeys[i]);
+    }
+}
+
+/// <summary>สูตรคราฟต์กระสุนที่ Upgrade Corner</summary>
+public sealed class AmmoRecipe
+{
+    public string ammoId;
+    public int scrap;
+    public int metal;
+    public int yield;
+
+    public static readonly AmmoRecipe[] All =
+    {
+        new AmmoRecipe { ammoId = ItemCatalog.AmmoRifle, scrap = 0, metal = 1, yield = 30 },
+        new AmmoRecipe { ammoId = ItemCatalog.AmmoPistol, scrap = 1, metal = 1, yield = 12 },
+        new AmmoRecipe { ammoId = ItemCatalog.AmmoSniper, scrap = 1, metal = 2, yield = 5 },
+    };
+
+    public bool TryCraft()
+    {
+        PersistentInventory inventory = PersistentInventory.Instance;
+        if (inventory == null || !inventory.TrySpend((ItemCatalog.Scrap, scrap), (ItemCatalog.Metal, metal)))
+            return false;
+
+        inventory.Add(ammoId, yield);
+        return true;
+    }
+}
+
+/// <summary>สถานะล่องหนของผู้เล่น (ชิป Invisible) ระบบมองเห็นของศัตรู/กล้องวงจรปิดเช็กค่านี้</summary>
+public static class PlayerStealth
+{
+    public static bool IsInvisible { get; private set; }
+
+    public static void SetInvisible(bool value) => IsInvisible = value;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => IsInvisible = false;
+}

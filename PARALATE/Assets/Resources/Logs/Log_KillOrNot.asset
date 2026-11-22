@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f7b98c27d443f8b448b6a3f183565d03, type: 3}
+  m_Name: Log_KillOrNot
+  m_EditorClassIdentifier: Assembly-CSharp::LogEntryData
+  id: kill_or_not
+  title: Kill or Not
+  body: "Sneak up behind an enemy who has not noticed you.\n\n\u2022 Press <b>F</b>
+    to grab them (strangle)\n\u2022 Then press <b>F</b> again to stab: the enemy
+    dies and the body stays on the floor\n\u2022 Or hold <b>Ctrl</b> to choke them
+    out: the body is gone\n\nWait too long and they break free."
+  unlockAtStart: 0
+  order: 2
