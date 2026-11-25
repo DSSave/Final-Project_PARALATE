@@ -20,7 +20,6 @@ public static class UIPrefabBaker
         (CommandLineView.PrefabName, () => CommandLineView.BuildDefault()),
         (PauseMenuView.PrefabName, () => PauseMenuView.BuildDefault()),
         (SaveSlotsView.PrefabName, () => SaveSlotsView.BuildDefault()),
-        (XGearInstallerView.PrefabName, () => XGearInstallerView.BuildDefault()),
     };
 
     [MenuItem("Tools/Paralate/UI/Create Missing UI Prefabs")]

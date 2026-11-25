@@ -10,7 +10,22 @@ public class NoteReader : MonoBehaviour, IInteractable
     private bool isReading = false;
     private GameObject currentReader;
 
-    public string PromptText => isReading ? "[ E ] to close" : "[ E ] to read";
+    public string PromptText => isReading ? "[ E ] / [ Esc ] to close" : "[ E ] to read";
+
+    // ปิดโน้ตด้วย Esc (ปุ่ม Pause ใน PlayerInput.inputactions)
+    // เมนู Pause ไม่เปิดซ้อนในเฟรมเดียวกัน: PauseMenuUI ไม่รับ Esc ถ้าผู้เล่นถูกล็อกอยู่ในเฟรมก่อน (ตอนอ่านโน้ตผู้เล่นถูกล็อก)
+    private void Update()
+    {
+        if (isReading && PlayerControls.WasPressed(PlayerControls.Pause, UnityEngine.InputSystem.Key.Escape))
+            CloseNote();
+    }
+
+    private void OnDisable()
+    {
+        // โน้ตถูกปิด/ลบระหว่างอ่าน: ปลดล็อกผู้เล่นและซ่อนหน้าต่าง ไม่ให้ค้าง
+        if (isReading)
+            CloseNote();
+    }
 
     public void Interact(GameObject interactor)
     {
@@ -43,7 +58,8 @@ public class NoteReader : MonoBehaviour, IInteractable
         }
 
         currentReader = null;
-        NoteUIManager.Instance.HideNote();
+        if (NoteUIManager.Instance != null)
+            NoteUIManager.Instance.HideNote();
         SfxLibrary.PlayUI("note_close");
     }
 }

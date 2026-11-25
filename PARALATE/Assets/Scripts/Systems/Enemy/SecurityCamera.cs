@@ -390,7 +390,7 @@ public class SecurityCamera : MonoBehaviour, IShootable
 
         Shader shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Unlit/Transparent");
-        if (shader == null) shader = Shader.Find("HDRP/Unlit");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
 
         coneMaterial = new Material(shader) { renderQueue = 3000 };
         MeshRenderer renderer = go.AddComponent<MeshRenderer>();

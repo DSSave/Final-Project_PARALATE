@@ -56,6 +56,35 @@ public class PlayerKeycards : MonoBehaviour
         return requiredLevel <= 0 || HighestLevel >= requiredLevel;
     }
 
+    // ------------------------------------------------------------ กุญแจเฉพาะประตู (DoorKeyData)
+
+    private readonly List<DoorKeyData> keys = new List<DoorKeyData>();
+
+    /// <summary>กุญแจทุกดอกที่เก็บมาในด่านนี้ (หน้า Inventory / ระบบเซฟใช้)</summary>
+    public IReadOnlyList<DoorKeyData> OwnedKeys => keys;
+
+    public event Action<DoorKeyData> OnKeyGranted;
+
+    public void GrantKey(DoorKeyData key)
+    {
+        if (key == null || keys.Contains(key))
+            return;
+
+        keys.Add(key);
+        OnKeyGranted?.Invoke(key);
+    }
+
+    public bool HasKey(DoorKeyData key)
+    {
+        return key == null || keys.Contains(key);
+    }
+
+    /// <summary>ผู้เล่นใน Scene มีกุญแจดอกนี้ไหม (key = null ถือว่ามี)</summary>
+    public static bool PlayerHasKey(DoorKeyData key)
+    {
+        return key == null || (Instance != null && Instance.HasKey(key));
+    }
+
     public static PlayerKeycards GetOrAdd(GameObject player)
     {
         PlayerKeycards cards = player.GetComponentInParent<PlayerKeycards>();

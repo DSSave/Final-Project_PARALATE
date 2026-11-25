@@ -66,7 +66,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 7059358587398334519, guid: 8b7f7c65a4b3437489e590b8efb5ec7b, type: 3}
+  - {fileID: 2100000, guid: ae98f8fac96514542b364142361e2759, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -188,7 +188,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 70.452, y: 0.93, z: 28.5}
-  m_LocalScale: {x: 3, y: 3, z: 3}
+  m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 2147550148209744255}
@@ -373,6 +373,7 @@ MonoBehaviour:
   slotType: 1
   headshotMultiplier: 4
   forceScopeOverlay: 0
+  aimStyle: 0
   hitMask:
     serializedVersion: 2
     m_Bits: 32755
@@ -381,7 +382,6 @@ MonoBehaviour:
   reloadDuration: 4
   reloadMovementSpeedMultiplier: 0.5
   autoReloadWhenEmpty: 0
-  commandCooldown: 45
   crosshairUI: {fileID: 0}
   isHeld: 0
   showDebugLine: 1
@@ -425,7 +425,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d38c3e30e1a119e4ca1e2992f1ab4c05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ItemPickup
-  itemData: {fileID: 11400000, guid: 79b5c77364ba1a147af8335f20db5de8, type: 2}
+  itemData: {fileID: 11400000, guid: d4681e215d6e7ce44932f0672ab37d0a, type: 2}
 --- !u!114 &2501975617550388151
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -438,7 +438,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc3eb417998b444f957777de8ef24cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WeaponInfo
-  itemData: {fileID: 0}
+  itemData: {fileID: 11400000, guid: d4681e215d6e7ce44932f0672ab37d0a, type: 2}
 --- !u!82 &5041806745218822092
 AudioSource:
   m_ObjectHideFlags: 0
@@ -602,7 +602,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 7059358587398334519, guid: 8b7f7c65a4b3437489e590b8efb5ec7b, type: 3}
+  - {fileID: 2100000, guid: ae98f8fac96514542b364142361e2759, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

@@ -24,6 +24,47 @@ public class GunAction : MonoBehaviour
     [Tooltip("ซูมแล้วขึ้นกรอบกล้อง Sniper (ปืนชนิด Sniper ขึ้นให้อัตโนมัติอยู่แล้ว)")]
     public bool forceScopeOverlay = false;
 
+    public enum AimStyle
+    {
+        Auto,              // Sniper = ซูมบุคคลที่หนึ่ง / ปืนอื่น = เล็งไหล่ (เฉพาะ Scene ที่มีกล้อง TPS)
+        FirstPersonScope,  // คลิกขวา = ซูมบุคคลที่หนึ่งเสมอ
+        OverShoulder       // คลิกขวา = เล็งไหล่แบบ RE4 (เฉพาะ Scene ที่มีกล้อง TPS ไม่งั้นใช้ซูมเดิม)
+    }
+
+    [Tooltip("วิธีเล็งเมื่อคลิกขวา: Auto = Sniper ซูม / USP, AK เล็งไหล่แบบ RE4 (ต้องมี PlayerTpsCameraRig ใน Scene)")]
+    public AimStyle aimStyle = AimStyle.Auto;
+
+    /// <summary>
+    /// คลิกขวาปืนนี้ = เล็งไหล่ (PlayerTpsCameraRig คุม) แทนซูมบุคคลที่หนึ่ง
+    /// Scene ที่ไม่มีกล้อง TPS (กล้องมุมตายตัว) ได้ false เสมอ = ทำงานแบบเดิมทุกอย่าง
+    /// </summary>
+    public bool UsesOverShoulderAim
+    {
+        get
+        {
+            PlayerTpsCameraRig rig = PlayerTpsCameraRig.Active;
+            if (rig == null || movementController == null || rig.player != movementController)
+                return false;
+
+            switch (aimStyle)
+            {
+                case AimStyle.OverShoulder: return true;
+                case AimStyle.FirstPersonScope: return false;
+                default: return !UsesScopeOverlay; // Auto: Sniper ใช้ซูม
+            }
+        }
+    }
+
+    // เล็งไหล่แบบ RE4 ต้นฉบับ: ต้องคลิกขวาเล็งอยู่จึงยิงได้ (ปืนอื่น/Scene อื่นยิงได้ตามเดิม)
+    private bool AimRuleAllowsFire()
+    {
+        if (!UsesOverShoulderAim)
+            return true;
+
+        PlayerTpsCameraRig rig = PlayerTpsCameraRig.Active;
+        return !rig.requireAimToFire || rig.IsAimingWith(this);
+    }
+
     [Header("Hit Detection")]
     [Tooltip("เลเยอร์ที่กระสุนชนได้ (ค่าเริ่มต้น = ทุกเลเยอร์ยกเว้น Ignore Raycast) " +
              "ถ้ามี Collider ล่องหนที่ขวางกระสุน ให้ย้ายไปเลเยอร์ Ignore Raycast หรือเอาเลเยอร์นั้นออกจากช่องนี้")]
@@ -38,22 +79,13 @@ public class GunAction : MonoBehaviour
     public float reloadMovementSpeedMultiplier = 0.5f;
     public bool autoReloadWhenEmpty = true;
 
-    [Header("Command (เรียกปืนด้วยสูตรลูกศร)")]
-    [Tooltip("ยิงแม็กที่เรียกมาหมดแล้ว ต้องรอกี่วินาทีจึงเรียกปืนนี้ได้อีก")]
-    [Min(0f)] public float commandCooldown = 30f;
-
-    /// <summary>ปืนที่เรียกด้วย Command: มีแม็กเดียว รีโหลดไม่ได้ ไม่ใช้กระสุนในกระเป๋า</summary>
-    public bool CommandMode { get; private set; }
-
-    /// <summary>ยิงนัดสุดท้ายของแม็กแล้ว (ใช้ใน Command mode เพื่อเก็บปืนและเริ่ม Cooldown)</summary>
-    public event Action OnMagazineEmptied;
-
-    /// <summary>เปิดโหมด Command: เติมแม็กเต็ม 1 แม็ก</summary>
-    public void SetCommandMode(bool value)
+    /// <summary>
+    /// ตั้งกระสุนในแม็กตรงๆ (PickupSystem คืนค่าที่จำไว้ตอนสลับปืนในช่อง Weapon กลับมา)
+    /// ปืนเริ่มต้นด้วยแม็กเต็ม รีโหลด (R) จากกระสุนในกระเป๋าตามปกติ (ไม่มี Cooldown / ปืนไม่หายตอนหมดแม็กแล้ว)
+    /// </summary>
+    public void SetLoadedAmmo(int amount)
     {
-        CommandMode = value;
-        if (value)
-            currentAmmo = magazineSize;
+        currentAmmo = Mathf.Clamp(amount, 0, magazineSize);
         UpdateAmmoUI();
     }
 
@@ -152,7 +184,7 @@ public class GunAction : MonoBehaviour
     public string UpgradeKey => WeaponUpgrades.KeyOf(ResolvedAmmoType);
 
     /// <summary>กระสุนสำรองในกระเป๋า (คลังถาวร) ของชนิดที่ปืนนี้ใช้</summary>
-    public int ReserveAmmo => CommandMode ? 0 : PersistentInventory.Instance != null ? PersistentInventory.Instance.GetAmount(AmmoItemId) : 0;
+    public int ReserveAmmo => PersistentInventory.Instance != null ? PersistentInventory.Instance.GetAmount(AmmoItemId) : 0;
 
     public float EffectiveDamage => damage * WeaponUpgrades.DamageMultiplier(UpgradeKey);
     public float EffectiveReloadDuration => reloadDuration / WeaponUpgrades.ReloadSpeedMultiplier(UpgradeKey);
@@ -268,18 +300,18 @@ public class GunAction : MonoBehaviour
         HandleCrosshair();
         HandleReload();
 
-        if (isHeld && !isReloading && currentAmmo > 0 && !IsOwnerLocked()
+        bool aimAllowsFire = !isHeld || AimRuleAllowsFire();
+
+        if (isHeld && !isReloading && currentAmmo > 0 && !IsOwnerLocked() && aimAllowsFire
             && IsFirePressed() && Time.time > nextFireTime)
         {
             nextFireTime = Time.time + fireRate;
             Shoot();
         }
-        else if (isHeld && !isReloading && currentAmmo <= 0 && !IsOwnerLocked() && WasFirePressedThisFrame())
+        else if (isHeld && !isReloading && currentAmmo <= 0 && !IsOwnerLocked() && aimAllowsFire && WasFirePressedThisFrame())
         {
             // แม็กว่าง: เสียงไกเปล่า + บอกผู้เล่นว่าต้องทำอะไร
             SfxLibrary.Play("empty_click");
-            if (CommandMode)
-                return;
             HudToast.Show(ReserveAmmo > 0 ? "Press R to reload" : "Out of " + ItemCatalog.NameOf(AmmoItemId));
         }
     }
@@ -321,7 +353,7 @@ public class GunAction : MonoBehaviour
 
     void HandleReload()
     {
-        if (!isHeld || isReloading || IsOwnerLocked() || CommandMode)
+        if (!isHeld || isReloading || IsOwnerLocked())
             return;
 
         if (currentAmmo >= magazineSize)
@@ -353,7 +385,7 @@ public class GunAction : MonoBehaviour
 
     public void StartReload()
     {
-        if (!isHeld || isReloading || currentAmmo >= magazineSize || CommandMode)
+        if (!isHeld || isReloading || currentAmmo >= magazineSize)
             return;
 
         // ไม่มีกระสุนชนิดนี้ในกระเป๋า = รีโหลดไม่ได้
@@ -433,6 +465,13 @@ public class GunAction : MonoBehaviour
     // ฟังก์ชันนี้ใช้จัดการ UI เป้าเล็งและเคอร์เซอร์เมาส์
     void HandleCrosshair()
     {
+        // เล็งไหล่: PlayerTpsCameraRig แสดงเป้า (จุดที่กระสุนจะไปโดน) เอง
+        if (isHeld && UsesOverShoulderAim)
+        {
+            SetCrosshairVisible(false);
+            return;
+        }
+
         if (crosshairUI != null)
         {
             // ตอนถือปืนปกติจะไม่มีเป้าเล็ง เป้าเล็งจะแสดงเฉพาะตอนซูมเท่านั้น
@@ -458,7 +497,8 @@ public class GunAction : MonoBehaviour
 
         // CanAim = false ตอนพิงกำแพง: คลิกขวาไม่ทำอะไร (ไม่ซูม ไม่หันตามเมาส์)
         bool canAim = movementController == null || movementController.CanAim;
-        bool shouldScope = enableScope && isHeld && canAim && !IsOwnerLocked() && resolvedAimAction != null && resolvedAimAction.IsPressed();
+        bool shouldScope = enableScope && isHeld && canAim && !IsOwnerLocked() && resolvedAimAction != null && resolvedAimAction.IsPressed()
+                           && !UsesOverShoulderAim; // เล็งไหล่ใช้กล้องของ PlayerTpsCameraRig ไม่ซูมบุคคลที่หนึ่ง
         SetScoped(shouldScope, false);
     }
     // ฟังก์ชันนี้ใช้เพื่อหาค่า InputAction ของการเล็ง (Scope) จาก InputActionReference หรือจาก PlayerInput
@@ -523,9 +563,6 @@ public class GunAction : MonoBehaviour
         currentAmmo--;
         UpdateAmmoUI();
 
-        if (currentAmmo <= 0)
-            OnMagazineEmptied?.Invoke();
-
         // เล่นเสียงยิงปืนและปล่อยเสียงให้ AI ได้ยิน
         PlaySound(fireSound, fireVolume, "shot_" + UpgradeKey.ToLowerInvariant());
         PlayerNoiseEmitter noiseEmitter = ResolveNoiseEmitter();
@@ -536,7 +573,14 @@ public class GunAction : MonoBehaviour
 
         laserLine.SetPosition(0, firePoint.position);
 
-        Vector3 shootDirection = isScoped ? GetScopedShootDirection() : GetForwardShootDirection();
+        Vector3 shootDirection;
+        PlayerTpsCameraRig rig = PlayerTpsCameraRig.Active;
+        if (isScoped)
+            shootDirection = GetScopedShootDirection();
+        else if (rig != null && rig.IsAimingWith(this) && rig.TryGetShotDirection(firePoint.position, out Vector3 aimDirection))
+            shootDirection = aimDirection; // เล็งไหล่: ยิงจากปากกระบอกไปยังจุดกลางจอ (จุดเดียวกับเป้าที่เห็น)
+        else
+            shootDirection = GetForwardShootDirection();
 
         if (TryRaycastShot(firePoint.position, shootDirection, out RaycastHit hit))
         {
@@ -792,12 +836,37 @@ public class GunAction : MonoBehaviour
 
     private void PrepareFirstPersonScopeCameraPose()
     {
-        Quaternion startRotation = ownerTransform != null ? ownerTransform.rotation : transform.rotation;
-        Vector3 euler = startRotation.eulerAngles;
-        firstPersonYaw = euler.y;
-        firstPersonPitch = NormalizePitch(euler.x);
+        PlayerTpsCameraRig rig = PlayerTpsCameraRig.Active;
+        if (mainCam == null)
+            mainCam = Camera.main;
+
+        if (rig != null && movementController != null && rig.player == movementController && mainCam != null)
+        {
+            // กล้อง TPS: หันซ้าย/ขวาตามทิศที่กล้อง (เมาส์) มองอยู่ แต่ก้ม/เงยเริ่มที่ระดับสายตาเสมอ (มองตรงระดับตัว–หัว)
+            // ตัวละครหันตามในเฟรมถัดไป (HandleFirstPersonScopeLook) ระหว่างซูมยังก้ม/เงยด้วยเมาส์ได้ตามปกติ
+            Vector3 forward = mainCam.transform.forward;
+            firstPersonYaw = Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+            firstPersonPitch = 0f;
+        }
+        else
+        {
+            // กล้องมุมตายตัว: ซูมไปทางที่ตัวละครหันอยู่ (แบบเดิม)
+            Quaternion startRotation = ownerTransform != null ? ownerTransform.rotation : transform.rotation;
+            Vector3 euler = startRotation.eulerAngles;
+            firstPersonYaw = euler.y;
+            firstPersonPitch = NormalizePitch(euler.x);
+        }
+
         SaveAndApplyFirstPersonCursorState();
         UpdateFirstPersonScopeCamera();
+    }
+
+    /// <summary>มุมที่กล้องซูมบุคคลที่หนึ่งมองอยู่ (false = ไม่ได้ซูม) กล้อง TPS ใช้ตั้งมุมต่อหลังเลิกซูม</summary>
+    public bool TryGetScopeLook(out float yaw, out float pitch)
+    {
+        yaw = firstPersonYaw;
+        pitch = firstPersonPitch;
+        return isFirstPersonScopeCameraActive;
     }
 
     private float NormalizePitch(float pitch)

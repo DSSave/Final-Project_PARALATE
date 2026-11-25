@@ -7,8 +7,9 @@ public enum CommandArrow { Up, Down, Left, Right }
 public enum CommandKind
 {
     OpenSaveMenu, // เปิดหน้าต่าง Save & Load
-    Consumable,   // ใส่ของใช้ (Medkit, X-Gear Cell) ลงช่อง Command แล้วคลิกซ้ายเพื่อใช้
-    Weapon        // เรียกปืนมา 1 แม็ก ยิงหมดติด Cooldown (ตั้งที่ GunAction.commandCooldown)
+    Consumable,   // ใช้ของทันที (Medkit, X-Gear Cell) — ใช้จากหน้า Inventory (คลิกขวา > Use) ได้ด้วย
+    Weapon,       // เปลี่ยนปืนในช่อง Weapon ของ WeaponWheel เป็นปืนนี้ (ต้องเป็นเจ้าของ) กระสุนรีโหลดจากกระเป๋า
+    XGearChip     // ใส่ Active Chip นี้เข้าช่อง X-Gear แล้วถือ X-Gear ขึ้นมา คลิกซ้ายเพื่อใช้ (ใช้ Charge)
 }
 
 [Serializable]
@@ -37,8 +38,9 @@ public class CommandRecipe
 }
 
 /// <summary>
-/// สูตร CommandLine ทั้งเกม (Assets/Resources/CommandBook.asset) แก้ลำดับลูกศร/ปริมาณ/Prefab ใน Inspector ได้
-/// ถ้าไม่มีไฟล์ จะใช้ค่าเริ่มต้นจาก Defaults() (สูตรเดียวกัน แต่ยังไม่มี Prefab ปืน)
+/// สูตร CommandLine ที่ "ไม่ใช่ไอเทม" (Assets/Resources/CommandBook.asset) เช่น SaveGame
+/// สูตรของไอเทม (ปืน, Medkit, X-Gear Cell) ย้ายไปอยู่ใน ItemData ของแต่ละไอเทมแล้ว (Assets/Resources/Items/*.asset ส่วน CommandLine)
+/// ถ้าไม่มีไฟล์นี้ จะใช้ค่าเริ่มต้นจาก Defaults() (Id ที่ซ้ำกับ ItemData จะใช้ของ ItemData)
 /// </summary>
 [CreateAssetMenu(menuName = "Paralate/Command Book", fileName = "CommandBook")]
 public class CommandBookData : ScriptableObject

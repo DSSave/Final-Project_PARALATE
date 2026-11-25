@@ -35,9 +35,11 @@ public static class SaveSystem
         public List<Entry> inventory = new List<Entry>();
         public List<Entry> run = new List<Entry>();
         public List<int> keycards = new List<int>();
-        public string passive;
-        public string active;
-        public string map;
+        public List<string> doorKeys = new List<string>(); // Id ของ DoorKeyData (Resources/Keys)
+        public string passive;  // เซฟเก่า: ชิปในช่อง Passive (ระบบติดตั้งชิปเลิกใช้แล้ว)
+        public string active;   // Active Chip ที่เรียกไว้ในช่อง X-Gear
+        public string map;      // เซฟเก่า: Map Data ที่ติดตั้ง
+        public string weapon;   // ปืนในช่อง Weapon (null = เซฟเก่าก่อนมีช่องนี้)
         public List<string> commands = new List<string>();
         public string savedAt;
     }
@@ -99,9 +101,9 @@ public static class SaveSystem
             scene = SceneManager.GetActiveScene().name,
             position = player.transform.position,
             yaw = player.transform.eulerAngles.y,
-            passive = XGearLoadout.PassiveId,
-            active = XGearLoadout.ActiveId,
-            map = XGearLoadout.MapId,
+            // passive / map ไม่ใช้แล้ว (ชิปอยู่ในคลัง inventory) เก็บช่องไว้ให้อ่านเซฟเก่าได้
+            active = player.GetComponent<XGearSystem>() != null ? player.GetComponent<XGearSystem>().LoadedChip : string.Empty,
+            weapon = PickupSystem.SavedWeaponId,
             savedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm")
         };
 
@@ -121,7 +123,11 @@ public static class SaveSystem
 
         PlayerKeycards cards = player.GetComponent<PlayerKeycards>();
         if (cards != null)
+        {
             data.keycards.AddRange(cards.OwnedLevels);
+            foreach (DoorKeyData key in cards.OwnedKeys)
+                if (key != null) data.doorKeys.Add(key.Id);
+        }
 
         data.commands.AddRange(CommandBook.LearnedIds);
 
@@ -161,8 +167,15 @@ public static class SaveSystem
         // ของที่ไม่ผูกกับ Scene: คืนค่าทันที
         PersistentInventory.Instance?.ReplaceAll(ToPairs(data.inventory));
         RunInventory.Instance?.ReplaceAll(ToPairs(data.run));
-        XGearLoadout.SetRaw(data.passive, data.active, data.map);
         CommandBook.SetLearned(data.commands);
+        PickupSystem.SavedWeaponId = data.weapon; // ปืนในช่อง Weapon (PickupSystem ใส่ให้ตอนเริ่ม Scene)
+
+        // เซฟเก่า (ไม่มีช่อง weapon) ที่ยังมีชิปติดตั้งอยู่ใน 3 ช่อง: คืนเข้าคลัง (ตอนติดตั้งชิปถูกหักออกจากคลัง)
+        if (data.weapon == null)
+        {
+            foreach (string chip in new[] { data.passive, data.map, data.active })
+                if (!string.IsNullOrEmpty(chip)) PersistentInventory.Instance?.Add(chip, 1);
+        }
 
         // ของบนตัวผู้เล่น: ใส่หลังโหลด Scene เสร็จ
         pending = data;
@@ -217,13 +230,29 @@ public static class SaveSystem
             CameraZone.RefreshForPlayer(controller);
 
         player.GetComponent<PlayerHealth>()?.SetHealth(data.health);
-        player.GetComponent<XGearSystem>()?.SetCharges(data.xgearCharges);
+        XGearSystem gear = player.GetComponent<XGearSystem>();
+        if (gear != null)
+        {
+            gear.SetCharges(data.xgearCharges);
+            if (data.weapon != null) gear.SetLoadedChip(data.active); // เซฟใหม่: Active Chip ที่เรียกไว้
+        }
 
         if (data.keycards != null && data.keycards.Count > 0)
         {
             PlayerKeycards cards = PlayerKeycards.GetOrAdd(player.gameObject);
             foreach (int level in data.keycards)
                 cards.Grant(level);
+        }
+
+        if (data.doorKeys != null && data.doorKeys.Count > 0)
+        {
+            PlayerKeycards cards = PlayerKeycards.GetOrAdd(player.gameObject);
+            foreach (string id in data.doorKeys)
+            {
+                DoorKeyData key = DoorKeyData.Find(id);
+                if (key != null) cards.GrantKey(key);
+                else Debug.LogWarning($"SaveSystem: ไม่พบกุญแจ '{id}' ใน Resources/{DoorKeyData.ResourcesFolder}");
+            }
         }
     }
 

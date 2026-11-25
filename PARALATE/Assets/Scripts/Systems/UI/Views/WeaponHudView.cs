@@ -12,7 +12,7 @@ public class WeaponHudView : MonoBehaviour
 {
     public const string PrefabName = "WeaponHUD";
 
-    [Tooltip("ลำดับต้องเป็น Unarmed, Knife, Command, X-Gear")]
+    [Tooltip("ลำดับต้องเป็น Unarmed, Knife, Weapon, X-Gear (ตำแหน่งบนจอจัดได้อิสระ ลูกกลิ้งเลื่อนตามตำแหน่งจริง)")]
     public WeaponHudRowView[] rows = new WeaponHudRowView[4];
     [Tooltip("จุดที่แถวที่ถืออยู่ไปอยู่ตอนไม่ได้กด Tab (ใช้ตำแหน่ง anchoredPosition ของวัตถุนี้)")]
     public RectTransform closedSlot;
@@ -27,6 +27,14 @@ public class WeaponHudView : MonoBehaviour
     [Tooltip("แถวที่เลือกยื่นออกมาทางซ้ายกี่พิกเซล ตอนกด Tab")]
     public float selectedShift = 28f;
 
+    [Header("ซ่อนอัตโนมัติ")]
+    [Tooltip("เปิด = HUD ซ่อนอยู่ ขึ้นเฉพาะตอนกด Tab และค้างไว้หลังเปลี่ยนอาวุธ / ปิด = แสดงตลอด")]
+    public bool autoHide = true;
+    [Tooltip("เปลี่ยนอาวุธแล้วค้าง HUD ไว้กี่วินาทีก่อนหาย")]
+    [Min(0f)] public float showAfterChangeSeconds = 1f;
+    [Tooltip("เวลาค่อยๆ จางหาย (วินาที)")]
+    [Min(0f)] public float fadeOutSeconds = 0.2f;
+
     // ---------------------------------------------------------------- หน้าตาเริ่มต้น (ใช้สร้าง Prefab ครั้งแรก)
 
     public static WeaponHudView BuildDefault()
@@ -35,7 +43,8 @@ public class WeaponHudView : MonoBehaviour
         canvas.GetComponent<GraphicRaycaster>().enabled = false;
         WeaponHudView view = canvas.gameObject.AddComponent<WeaponHudView>();
 
-        string[] titles = { "UNARMED", "KNIFE", "COMMAND", "X-GEAR" };
+        // ลำดับใน rows ต้องเป็น Unarmed, Knife, Weapon, X-Gear (ตรงกับ WeaponWheelUI) แต่บนจอเรียง X-Gear บนสุด → Unarmed ล่างสุด
+        string[] titles = { "UNARMED", "KNIFE", "WEAPON", "X-GEAR" };
         Vector2 corner = new Vector2(1f, 0f);
         Vector2 margin = new Vector2(40f, 40f);
         Vector2 rowSize = new Vector2(360f, 68f);
@@ -46,7 +55,7 @@ public class WeaponHudView : MonoBehaviour
         for (int i = 0; i < titles.Length; i++)
         {
             Image background = UIBuilder.Panel("Row_" + titles[i], canvas.transform, view.idleColor, false);
-            float y = (titles.Length - 1 - i) * (rowSize.y + gap);
+            float y = i * (rowSize.y + gap);
             UIBuilder.Place(background.rectTransform, corner, corner, new Vector2(-margin.x, margin.y + y), rowSize);
 
             WeaponHudRowView row = background.gameObject.AddComponent<WeaponHudRowView>();

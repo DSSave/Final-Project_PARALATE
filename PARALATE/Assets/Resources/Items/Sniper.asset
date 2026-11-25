@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7b38e213e270042a9e4e7f559e81c2, type: 3}
+  m_Name: Sniper
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  pickupSound: {fileID: 8300000, guid: bbe0341c745783c438700041472581f5, type: 3}
+  itemName: Sniper
+  icon: {fileID: 0}
+  promptText: '[ E ] to pick up'
+  hasCommand: 1
+  command:
+    id: sniper
+    displayName: Sniper
+    description: Sniper rifle. One magazine, then a cooldown.
+    kind: 2
+    sequence: 00000000010000000200000003000000020000000000000001000000
+    itemId: weapon_sniper
+    weaponPrefab: {fileID: 7950042793085795323, guid: d589477769acd3b42860b6f05029e293, type: 3}
+    effectAmount: 1
+    knownFromStart: 0

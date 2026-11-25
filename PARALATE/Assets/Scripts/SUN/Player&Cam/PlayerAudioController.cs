@@ -119,7 +119,9 @@ public class PlayerAudioController : MonoBehaviour
     /// </summary>
     public void HandleFootstep(bool isGrounded, bool isSprinting, bool isCrouching, float currentSpeed)
     {
-        if (syncWithAnimation && ResolveFeet())
+        // Animator ที่ตั้ง Culling = Cull Update Transforms จะหยุดขยับกระดูกตอนตัวละครไม่อยู่ในจอ
+        // (เช่น กล้องห้องมุมตายตัวที่ผู้เล่นเดินพ้นเฟรม) เท้าไม่ขยับ = ตรวจก้าวไม่ได้ → ใช้จังหวะเวลาแทนช่วงนั้น
+        if (syncWithAnimation && ResolveFeet() && FeetAreAnimating())
         {
             if (DetectFootPlant() && isGrounded && !isCrouching)
             {
@@ -165,7 +167,26 @@ public class PlayerAudioController : MonoBehaviour
             return false;
 
         feet = new[] { left, right };
+        footRenderers = footAnimator.GetComponentsInChildren<Renderer>(true);
         return true;
+    }
+
+    private Renderer[] footRenderers;
+
+    // กระดูกเท้าถูกอัปเดตอยู่ไหม: Always Animate = เสมอ / แบบ Culling = ต้องมี Renderer ของตัวละครอยู่ในจอสักอัน
+    bool FeetAreAnimating()
+    {
+        if (footAnimator == null || !footAnimator.isActiveAndEnabled)
+            return false;
+
+        if (footAnimator.cullingMode == AnimatorCullingMode.AlwaysAnimate)
+            return true;
+
+        for (int i = 0; i < footRenderers.Length; i++)
+            if (footRenderers[i] != null && footRenderers[i].isVisible)
+                return true;
+
+        return false;
     }
 
     // คืน true ในเฟรมที่เท้าข้างใดข้างหนึ่งเพิ่งแตะพื้น
@@ -219,7 +240,11 @@ public class PlayerAudioController : MonoBehaviour
 
     AudioClip[] GetClipsForCurrentSurface()
     {
-        Vector3 origin = transform.position + Vector3.up * 0.1f;
+        // ยิงหาพื้นจากระดับเท้า (Pivot ของผู้เล่นอยู่กลางตัว: เดิมยิงจากกลางตัวแล้วเหลือระยะเผื่อแค่ ~2 ซม. บนทางลาดจะหาพื้นไม่เจอ)
+        CharacterController body = GetComponent<CharacterController>();
+        Vector3 origin = body != null
+            ? new Vector3(transform.position.x, body.bounds.min.y + 0.3f, transform.position.z)
+            : transform.position + Vector3.up * 0.1f;
 
         if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, groundCheckDistance, groundLayer, QueryTriggerInteraction.Ignore))
         {

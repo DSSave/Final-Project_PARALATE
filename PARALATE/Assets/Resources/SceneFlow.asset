@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 95a27f5777a6ddb469ffa4764a394a63, type: 3}
   m_Name: SceneFlow
   m_EditorClassIdentifier: Assembly-CSharp::SceneFlow
-  newGame: HideOut
+  newGame: Metro
   mainMenu: MainMenu
   hub: Base
   options: OptionsMenu
   levels:
-  - HideOut
+  - Metro

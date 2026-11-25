@@ -29,7 +29,6 @@ public class UpgradeUI : MonoBehaviour
     private RectTransform picker;
     private TextMeshProUGUI resourceLabel;
     private TopDownPlayerController lockedPlayer;
-    private ItemCategory? pickerSlot;
     private Transform showcaseTarget;
 
     /// <param name="showcaseTarget">โมเดลของคนอัปเกรด (กล้องจะหันไปหา) ถ้าเว้นว่าง กล้องจะโชว์ตัวผู้เล่นแทน</param>
@@ -153,7 +152,6 @@ public class UpgradeUI : MonoBehaviour
     private void SelectTab(Tab tab)
     {
         currentTab = tab;
-        pickerSlot = null;
 
         for (int i = 0; i < tabButtons.Length; i++)
             tabButtons[i].targetGraphic.color = i == (int)tab ? UIBuilder.AccentColor : UIBuilder.ButtonColor;
@@ -297,15 +295,25 @@ public class UpgradeUI : MonoBehaviour
                 body, owned ? UIBuilder.TextColor : UIBuilder.MutedText, null, null, false);
         }
 
-        // X-Gear: สรุปของที่ใส่อยู่ กดแล้วไปแท็บ X Gear (ที่เดียวที่ใช้เปลี่ยน Data)
-        string gear = $"<b>X-Gear</b>\n<size=20>Passive: {GearName(XGearLoadout.PassiveId)}\n" +
-                      $"Active: {GearName(XGearLoadout.ActiveId)}\nMap: {GearName(XGearLoadout.MapId)}</size>";
+        // X-Gear: สรุปจำนวนชิปในคลัง กดแล้วไปแท็บ X Gear
+        string gear = $"<b>X-Gear</b>\n<size=20>Passive chips: {CountChips(ItemCategory.PassiveChip)}\n" +
+                      $"Active chips: {CountChips(ItemCategory.ActiveChip)}\nMap chips: {CountChips(ItemCategory.MapData)}</size>";
 
         AddRow("X-GEAR", "X-Gear", UIBuilder.AccentColor, gear, UIBuilder.TextColor,
             "open", () => SelectTab(Tab.XGear), true, () => SelectTab(Tab.XGear));
     }
 
-    private static string GearName(string id) => string.IsNullOrEmpty(id) ? "-" : ItemCatalog.NameOf(id);
+    private static int CountChips(ItemCategory category)
+    {
+        PersistentInventory inventory = PersistentInventory.Instance;
+        if (inventory == null)
+            return 0;
+
+        int total = 0;
+        foreach (ItemDef def in ItemCatalog.All)
+            if (def.category == category) total += inventory.GetAmount(def.id);
+        return total;
+    }
 
     /// <summary>สูตรเป็นตัวอักษร (W A S D) ไว้แสดงในข้อความ</summary>
     private static string CommandText(CommandRecipe recipe)
@@ -337,92 +345,37 @@ public class UpgradeUI : MonoBehaviour
 
     private void BuildXGearTab()
     {
+        // ชิปอยู่ในคลังแล้ว (ไม่ต้องติดตั้งทีละช่อง): แท็บนี้แค่แสดงชิปที่มี
+        //   Passive ได้ผลอัตโนมัติ (ซ้อนตามจำนวน) / Active เรียกด้วย Command / Map ขึ้นเองเมื่อเข้าโซน
+        PersistentInventory inventory = PersistentInventory.Instance;
+
         for (int i = 0; i < GearSlots.Length; i++)
         {
-            ItemCategory slot = GearSlots[i];
-            string equipped = XGearLoadout.Get(slot);
-            ItemDef def = ItemCatalog.Get(equipped);
+            ItemCategory category = GearSlots[i];
+            int shown = 0;
 
-            string body = def == null
-                ? GearEmptyTexts[i]
-                : $"<b>{def.displayName}</b>\n<size=20>{def.description}</size>";
+            foreach (ItemDef def in ItemCatalog.All)
+            {
+                int amount = inventory != null && def.category == category ? inventory.GetAmount(def.id) : 0;
+                if (amount <= 0)
+                    continue;
 
-            AddRow(GearSlotNames[i], GearSlotNames[i], UIBuilder.MutedText, body, def == null ? Red : UIBuilder.TextColor,
-                null, null, false,
-                () =>
-                {
-                    // กดวงกลม: เปิด/ปิด Panel เลือก Data ของช่องนี้
-                    pickerSlot = pickerSlot == slot ? (ItemCategory?)null : slot;
-                    RefreshPicker();
-                },
-                def != null ? ItemCatalog.IconOf(def.id) : null);
+                shown++;
+                string body = $"<b>{def.displayName}</b>  x{amount}\n<size=20>{def.description}</size>";
+                AddRow(GearSlotNames[i], GearSlotNames[i], UIBuilder.MutedText, body, UIBuilder.TextColor,
+                    null, null, false, null, ItemCatalog.IconOf(def.id));
+            }
+
+            if (shown == 0)
+                AddRow(GearSlotNames[i], GearSlotNames[i], UIBuilder.MutedText, GearEmptyTexts[i], Red, null, null, false);
         }
     }
 
+    // Panel เลือก Data แบบเก่า (ติดตั้งชิป) ไม่ใช้แล้ว: ซ่อนไว้เสมอ
     private void RefreshPicker()
     {
-        bool show = currentTab == Tab.XGear && pickerSlot.HasValue;
-        picker.gameObject.SetActive(show);
-
-        if (!show)
-            return;
-
-        UIBuilder.Clear(picker);
-
-        ItemCategory slot = pickerSlot.Value;
-        int slotIndex = System.Array.IndexOf(GearSlots, slot);
-
-        TextMeshProUGUI title = UIBuilder.Text("Title", picker, "Insert " + GearSlotNames[slotIndex] + " Data", 24f, TextAlignmentOptions.Center);
-        UIBuilder.Size(title, -1f, 40f);
-
-        PersistentInventory inventory = PersistentInventory.Instance;
-        int count = 0;
-
-        IReadOnlyList<ItemDef> all = ItemCatalog.All;
-        for (int i = 0; i < all.Count; i++)
-        {
-            ItemDef def = all[i];
-            if (def.category != slot || inventory == null || !inventory.Has(def.id))
-                continue;
-
-            count++;
-            Button button = UIBuilder.Button(def.id, picker, $"{def.displayName}  x{inventory.GetAmount(def.id)}", () =>
-            {
-                if (XGearLoadout.Equip(slot, def.id))
-                {
-                    SfxLibrary.PlayUI("chip_insert");
-                    pickerSlot = null;
-                    Refresh();
-                }
-            }, 20f);
-            UIBuilder.Size(button, -1f, 56f);
-        }
-
-        if (count == 0)
-        {
-            TextMeshProUGUI empty = UIBuilder.Text("Empty", picker, "No data in inventory.\nFind chips / map data in missions.", 20f,
-                TextAlignmentOptions.Center, UIBuilder.MutedText);
-            UIBuilder.Size(empty, -1f, 90f);
-        }
-
-        if (!string.IsNullOrEmpty(XGearLoadout.Get(slot)))
-        {
-            Button remove = UIBuilder.Button("Remove", picker, "Remove (back to inventory)", () =>
-            {
-                XGearLoadout.Equip(slot, string.Empty);
-                SfxLibrary.PlayUI("chip_remove");
-                pickerSlot = null;
-                Refresh();
-            }, 20f, new Color(0.8f, 0.2f, 0.2f, 0.5f));
-            UIBuilder.Size(remove, -1f, 56f);
-        }
-
-        Button cancel = UIBuilder.Button("Cancel", picker, "Close", () =>
-        {
-            pickerSlot = null;
-            RefreshPicker();
-        }, 20f);
-        UIBuilder.Size(cancel, -1f, 48f);
+        if (picker != null)
+            picker.gameObject.SetActive(false);
     }
 
     // ------------------------------------------------------------ Craft

@@ -3,32 +3,60 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// หน้าตาของเมนู Esc (Prefab: Resources/UI/PauseMenu) — จัดตำแหน่ง/ขนาด/สี/ฟอนต์ใน Editor ได้ทุกชิ้น
-///   pages      : หน้าเนื้อหา 4 หน้า (Inventory, Logs, Setting, Exit) ระบบเปิดทีละหน้า
+/// หน้าตาของเมนู Esc (Prefab: Resources/UI/PauseMenu — วางซ้อนอยู่ใน Prefab MainHUD ด้วย แก้ที่ MainHUD > PauseMenu ได้)
+/// จัดตำแหน่ง/ขนาด/สี/ฟอนต์ใน Editor ได้ทุกชิ้น
+///   pages      : หน้าเนื้อหา 5 หน้า (Inventory, X-Gear, Logs, Setting, Exit) ระบบเปิดทีละหน้า
 ///   navButtons : ปุ่มเมนูขวา ลำดับเดียวกับ pages
-///   *Template  : ต้นแบบของรายการที่ซ้ำ (ช่อง Inventory, หัวข้อ Log, สูตร Command) ปิดไว้ ระบบ Clone ตอนรัน
+///   Inventory  : [Sprite ของที่ชี้ + Description] ซ้าย / [ตาราง Inventory + ตาราง Consumable] ขวา
+///                คลิกขวาช่อง Consumable = เมนู Use / Drop (contextMenu)
+///   X-Gear     : [รูป X-Gear (คงที่) + Description] ซ้าย / [Active, Passive, Map] ขวา
+///   *Template  : ต้นแบบของรายการที่ซ้ำ (ช่องของ, หัวข้อ Log, สูตร Command) ปิดไว้ ระบบ Clone ตอนรัน
 /// PauseMenuUI เป็นตัวเติมข้อมูลและผูกปุ่มทั้งหมด
 /// </summary>
 public class PauseMenuView : MonoBehaviour
 {
     public const string PrefabName = "PauseMenu";
 
-    [Header("เมนูขวา (ลำดับ: Inventory, Logs, Setting, Exit)")]
-    public Button[] navButtons = new Button[4];
-    public GameObject[] pages = new GameObject[4];
+    [Header("เมนูขวา (ลำดับ: Inventory, X-Gear, Logs, Setting, Exit)")]
+    public Button[] navButtons = new Button[5];
+    public GameObject[] pages = new GameObject[5];
     public Color navNormalColor = new Color(1f, 1f, 1f, 0.02f);
     public Color navSelectedColor = new Color(0.25f, 0.7f, 1f, 0.35f);
 
-    [Header("กล่องอธิบาย (ชี้เมาส์)")]
-    public GameObject tooltip;
-    public TextMeshProUGUI tooltipText;
-
     [Header("Inventory")]
+    [Tooltip("รูปของไอเทมที่ชี้อยู่ (เปลี่ยนตามไอเทม)")]
+    public Image inventoryPreview;
+    [Tooltip("ข้อความแทนรูป เมื่อไอเทมไม่มีไอคอน")]
+    public TextMeshProUGUI inventoryPreviewLabel;
+    public TextMeshProUGUI inventoryDescription;
     public RectTransform inventoryGrid;
+    public RectTransform consumableGrid;
+    [Tooltip("ช่องของ 1 ช่อง (ต้นแบบ ปิดไว้) ใช้ทุกตารางในเมนู")]
     public InventoryCellView cellTemplate;
     [Tooltip("ช่องว่างที่เติมให้เต็มตาราง (ปิดไว้)")]
     public GameObject emptyCellTemplate;
-    [Min(1)] public int gridCellCount = 30;
+    [Min(1)] public int gridCellCount = 21;
+    [Min(1)] public int consumableCellCount = 7;
+
+    [Header("เมนูคลิกขวา (Use / Drop)")]
+    [Tooltip("พื้นที่เต็มจอแบบโปร่งใส (คลิกนอกเมนู = ปิด) มี Panel ปุ่มอยู่ข้างใน")]
+    public GameObject contextMenu;
+    public RectTransform contextPanel;
+    public Button useButton;
+    public Button dropButton;
+
+    [Header("X-Gear")]
+    [Tooltip("รูป X-Gear แนวตั้ง (คงที่ ไม่เปลี่ยนตามชิป) ใส่ Sprite ใน Inspector")]
+    public Image xgearImage;
+    public TextMeshProUGUI xgearDescription;
+    public RectTransform activeGrid;
+    public RectTransform passiveGrid;
+    public RectTransform mapGrid;
+    [Min(1)] public int chipCellCount = 7;
+
+    [Header("ข้อความเริ่มต้นของช่อง Description")]
+    [TextArea] public string inventoryHint = "Hover an item to see its details.\nRight-click a consumable to Use or Drop.";
+    [TextArea] public string xgearHint = "Hover a chip to see its details.\nCall Active Chips with their Command (Q).";
 
     [Header("Logs")]
     public Button logTabButton;
@@ -46,8 +74,6 @@ public class PauseMenuView : MonoBehaviour
     [Header("Setting")]
     public Button fullscreenButton;
     public TextMeshProUGUI fullscreenMark;
-    public Button qualityButton;
-    public TextMeshProUGUI qualityLabel;
     public Slider mainSlider;
     public Slider musicSlider;
     public Slider sfxSlider;
@@ -60,6 +86,8 @@ public class PauseMenuView : MonoBehaviour
 
     // ================================================================ หน้าตาเริ่มต้น (ใช้สร้าง Prefab ครั้งแรก)
 
+    private static readonly Color BoxColor = new Color(1f, 1f, 1f, 0.05f);
+
     public static PauseMenuView BuildDefault()
     {
         Canvas canvas = UIBuilder.CreateCanvas(PrefabName, 300);
@@ -69,51 +97,37 @@ public class PauseMenuView : MonoBehaviour
         Image dim = UIBuilder.Panel("Dim", root, UIBuilder.DimColor);
         UIBuilder.Stretch(dim.rectTransform);
 
+        // หน้าต่างเนื้อหา (กลางซ้าย) + เมนูขวา (นอกหน้าต่าง มุมขวาบน) ตาม wireframe
         Image window = UIBuilder.Panel("Content", root, UIBuilder.WindowColor);
-        UIBuilder.Place(window.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-155f, 0f), new Vector2(780f, 720f));
-        RectTransform content = UIBuilder.Stretch(UIBuilder.Rect("Pages", window.transform), 30f, 30f, 30f, 30f);
+        UIBuilder.Place(window.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-130f, 0f), new Vector2(1180f, 680f));
+        RectTransform content = UIBuilder.Stretch(UIBuilder.Rect("Pages", window.transform), 40f, 40f, 40f, 40f);
 
-        // เมนูขวา
-        Image nav = UIBuilder.Panel("Nav", root, UIBuilder.WindowColor);
-        UIBuilder.Place(nav.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(395f, 0f), new Vector2(300f, 720f));
+        RectTransform nav = UIBuilder.Rect("Nav", root);
+        UIBuilder.Place(nav, new Vector2(0.5f, 0.5f), new Vector2(0f, 1f), new Vector2(470f, 340f), new Vector2(230f, 420f));
+        UIBuilder.Vertical(nav, 10f);
 
-        Image divider = UIBuilder.Panel("Divider", nav.transform, new Color(1f, 1f, 1f, 0.5f), false);
-        divider.rectTransform.anchorMin = new Vector2(0f, 0f);
-        divider.rectTransform.anchorMax = new Vector2(0f, 1f);
-        divider.rectTransform.offsetMin = Vector2.zero;
-        divider.rectTransform.offsetMax = new Vector2(2f, 0f);
-
-        RectTransform list = UIBuilder.Stretch(UIBuilder.Rect("List", nav.transform), 14f, 20f, 14f, 20f);
-        UIBuilder.Vertical(list, 6f);
-
-        string[] names = { "inventory", "logs", "setting", "exit" };
+        string[] names = { "Inventory", "X-Gear", "Logs", "Setting", "Exit" };
         for (int i = 0; i < names.Length; i++)
         {
-            Button button = UIBuilder.Button(names[i], list, names[i], null, 30f, view.navNormalColor);
+            Button button = UIBuilder.Button(names[i], nav, names[i], null, 28f, view.navNormalColor);
             UIBuilder.LabelOf(button).alignment = TextAlignmentOptions.MidlineLeft;
-            UIBuilder.Size(button, -1f, 70f);
+            UIBuilder.LabelOf(button).margin = new Vector4(16f, 0f, 0f, 0f);
+            UIBuilder.Size(button, -1f, 60f);
             view.navButtons[i] = button;
 
             RectTransform page = UIBuilder.Stretch(UIBuilder.Rect("Page_" + names[i], content));
             view.pages[i] = page.gameObject;
         }
 
-        TextMeshProUGUI hint = UIBuilder.Text("Hint", nav.transform, "Esc to resume  •  B inventory", 18f, TextAlignmentOptions.Bottom, UIBuilder.MutedText);
-        UIBuilder.Stretch(hint.rectTransform, 0f, 16f, 0f, 0f);
+        TextMeshProUGUI hint = UIBuilder.Text("Hint", root, "Esc to resume  •  B inventory", 18f, TextAlignmentOptions.Center, UIBuilder.MutedText);
+        UIBuilder.Place(hint.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), new Vector2(-130f, -350f), new Vector2(600f, 30f));
 
         BuildInventory(view, view.pages[0].transform);
-        BuildLogs(view, view.pages[1].transform);
-        BuildSetting(view, view.pages[2].transform);
-        BuildExit(view, view.pages[3].transform);
-
-        // กล่องอธิบายด้านขวาของเนื้อหา (วาดทับทุกหน้า)
-        Image tooltip = UIBuilder.Panel("Tooltip", window.transform, new Color(0.13f, 0.15f, 0.2f, 1f), false);
-        UIBuilder.Place(tooltip.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-30f, -30f), new Vector2(330f, 260f));
-        view.tooltipText = UIBuilder.Text("Text", tooltip.transform, string.Empty, 20f, TextAlignmentOptions.TopLeft);
-        view.tooltipText.richText = true;
-        UIBuilder.Stretch(view.tooltipText.rectTransform, 14f, 12f, 14f, 12f);
-        view.tooltip = tooltip.gameObject;
-        tooltip.gameObject.SetActive(false);
+        BuildXGear(view, view.pages[1].transform);
+        BuildLogs(view, view.pages[2].transform);
+        BuildSetting(view, view.pages[3].transform);
+        BuildExit(view, view.pages[4].transform);
+        BuildContextMenu(view, root);
 
         return view;
     }
@@ -132,20 +146,60 @@ public class PauseMenuView : MonoBehaviour
         return hint;
     }
 
+    // ป้ายหัวข้อเล็ก + กล่องใต้ป้าย (ตามกล่องใน wireframe)
+    private static RectTransform LabeledBox(Transform page, string label, Vector2 topLeft, Vector2 size, bool background = true)
+    {
+        TextMeshProUGUI text = UIBuilder.Text(label + "Label", page, label, 22f, TextAlignmentOptions.BottomLeft, UIBuilder.MutedText);
+        UIBuilder.Place(text.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), topLeft, new Vector2(size.x, 30f));
+
+        RectTransform box = background
+            ? UIBuilder.Panel(label + "Box", page, BoxColor, false).rectTransform
+            : UIBuilder.Rect(label + "Box", page);
+        UIBuilder.Place(box, new Vector2(0f, 1f), new Vector2(0f, 1f), topLeft + new Vector2(0f, -34f), size);
+        return box;
+    }
+
+    private static RectTransform Grid(RectTransform box, int columns)
+    {
+        RectTransform grid = UIBuilder.Stretch(UIBuilder.Rect("Grid", box), 8f, 8f, 8f, 8f);
+        GridLayoutGroup layout = grid.gameObject.AddComponent<GridLayoutGroup>();
+        layout.cellSize = new Vector2(84f, 84f);
+        layout.spacing = new Vector2(8f, 8f);
+        layout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        layout.constraintCount = columns;
+        return grid;
+    }
+
+    // ซ้าย: กล่องรูป + กล่อง Description (ใช้ทั้งหน้า Inventory และ X-Gear)
+    private static void LeftColumn(Transform page, string spriteLabel, out Image picture, out TextMeshProUGUI pictureLabel, out TextMeshProUGUI description)
+    {
+        RectTransform spriteBox = LabeledBox(page, spriteLabel, new Vector2(0f, 0f), new Vector2(300f, 280f));
+        picture = UIBuilder.Panel("Picture", spriteBox, Color.white, false);
+        picture.preserveAspect = true;
+        UIBuilder.Stretch(picture.rectTransform, 16f, 16f, 16f, 16f);
+
+        pictureLabel = UIBuilder.Text("PictureLabel", spriteBox, string.Empty, 30f, TextAlignmentOptions.Center);
+        UIBuilder.Stretch(pictureLabel.rectTransform, 10f, 10f, 10f, 10f);
+
+        RectTransform descBox = LabeledBox(page, "Description", new Vector2(0f, -330f), new Vector2(300f, 230f));
+        description = UIBuilder.Text("Text", descBox, string.Empty, 19f, TextAlignmentOptions.TopLeft);
+        description.richText = true;
+        UIBuilder.Stretch(description.rectTransform, 14f, 12f, 14f, 12f);
+    }
+
     private static void BuildInventory(PauseMenuView view, Transform page)
     {
-        Header(page, "Inventory");
+        LeftColumn(page, "Sprite", out view.inventoryPreview, out view.inventoryPreviewLabel, out view.inventoryDescription);
 
-        RectTransform grid = UIBuilder.Rect("Grid", page);
-        UIBuilder.Place(grid, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, -70f), new Vector2(380f, 460f));
-        GridLayoutGroup layout = grid.gameObject.AddComponent<GridLayoutGroup>();
-        layout.cellSize = new Vector2(72f, 72f);
-        layout.spacing = new Vector2(4f, 4f);
-        layout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        layout.constraintCount = 5;
-        view.inventoryGrid = grid;
+        // ขวา: ตาราง Inventory (บน) + Consumable (ล่าง)
+        RectTransform invBox = LabeledBox(page, "Inventory", new Vector2(340f, 0f), new Vector2(760f, 290f));
+        view.inventoryGrid = Grid(invBox, 7);
 
-        Image cell = UIBuilder.Panel("CellTemplate", grid, new Color(1f, 1f, 1f, 0.10f));
+        RectTransform conBox = LabeledBox(page, "Consumable", new Vector2(340f, -330f), new Vector2(760f, 110f));
+        view.consumableGrid = Grid(conBox, 7);
+
+        // ช่องต้นแบบ (ใช้ร่วมกันทุกตาราง)
+        Image cell = UIBuilder.Panel("CellTemplate", view.inventoryGrid, new Color(1f, 1f, 1f, 0.10f));
         InventoryCellView cellView = cell.gameObject.AddComponent<InventoryCellView>();
         cellView.background = cell;
         cellView.icon = UIBuilder.Panel("Icon", cell.transform, Color.white, false);
@@ -161,11 +215,55 @@ public class PauseMenuView : MonoBehaviour
         cell.gameObject.SetActive(false);
         view.cellTemplate = cellView;
 
-        Image empty = UIBuilder.Panel("EmptyCellTemplate", grid, new Color(1f, 1f, 1f, 0.04f), false);
+        Image empty = UIBuilder.Panel("EmptyCellTemplate", view.inventoryGrid, new Color(1f, 1f, 1f, 0.04f), false);
         empty.gameObject.SetActive(false);
         view.emptyCellTemplate = empty.gameObject;
 
-        Hint(page, "Hover for details  •  Call items and weapons with Q (Command)");
+        Hint(page, "Hover for details  •  Right-click a consumable: Use / Drop");
+    }
+
+    private static void BuildXGear(PauseMenuView view, Transform page)
+    {
+        LeftColumn(page, "X-Gear", out view.xgearImage, out TextMeshProUGUI placeholder, out view.xgearDescription);
+
+        // ยังไม่มีรูป X-Gear: ข้อความแทน (ใส่ Sprite ที่ X Gear Image แล้วลบ/ซ่อนข้อความนี้ได้)
+        placeholder.text = "X-GEAR";
+        placeholder.color = UIBuilder.AccentColor;
+        view.xgearImage.color = new Color(1f, 1f, 1f, 0f);
+
+        RectTransform activeBox = LabeledBox(page, "Active", new Vector2(340f, 0f), new Vector2(760f, 110f));
+        view.activeGrid = Grid(activeBox, 7);
+
+        RectTransform passiveBox = LabeledBox(page, "Passive", new Vector2(340f, -165f), new Vector2(760f, 110f));
+        view.passiveGrid = Grid(passiveBox, 7);
+
+        RectTransform mapBox = LabeledBox(page, "Map", new Vector2(340f, -330f), new Vector2(760f, 110f));
+        view.mapGrid = Grid(mapBox, 7);
+
+        Hint(page, "Passive chips stack  •  Active chips: Command (Q), then Left Click with X-Gear  •  Map chips show their area's minimap");
+    }
+
+    private static void BuildContextMenu(PauseMenuView view, Transform root)
+    {
+        // พื้นที่เต็มจอโปร่งใส: คลิกนอกปุ่ม = ปิดเมนู (PauseMenuUI ผูก onClick)
+        Image blocker = UIBuilder.Panel("ContextMenu", root, new Color(0f, 0f, 0f, 0f));
+        UIBuilder.Stretch(blocker.rectTransform);
+        blocker.gameObject.AddComponent<Button>().transition = Selectable.Transition.None;
+        view.contextMenu = blocker.gameObject;
+
+        Image panel = UIBuilder.Panel("Panel", blocker.transform, new Color(0.1f, 0.12f, 0.16f, 0.98f));
+        panel.rectTransform.anchorMin = panel.rectTransform.anchorMax = Vector2.zero;
+        panel.rectTransform.pivot = new Vector2(0f, 1f);
+        panel.rectTransform.sizeDelta = new Vector2(170f, 112f);
+        UIBuilder.Vertical(panel.rectTransform, 6f, 8);
+        view.contextPanel = panel.rectTransform;
+
+        view.useButton = UIBuilder.Button("Use", panel.transform, "Use", null, 22f);
+        UIBuilder.Size(view.useButton, -1f, 44f);
+        view.dropButton = UIBuilder.Button("Drop", panel.transform, "Drop", null, 22f, new Color(0.8f, 0.2f, 0.2f, 0.5f));
+        UIBuilder.Size(view.dropButton, -1f, 44f);
+
+        blocker.gameObject.SetActive(false);
     }
 
     private static void BuildLogs(PauseMenuView view, Transform page)
@@ -344,12 +442,6 @@ public class PauseMenuView : MonoBehaviour
         UIBuilder.Place(note.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, -290f), new Vector2(560f, 60f));
         note.gameObject.SetActive(false);
         view.audioNote = note.gameObject;
-
-        TextMeshProUGUI graphicsLabel = UIBuilder.Text("GraphicsLabel", page, "Graphics", 26f);
-        UIBuilder.Place(graphicsLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, -430f), new Vector2(220f, 44f));
-        view.qualityButton = UIBuilder.Button("GraphicsQuality", page, "Quality", null, 24f, new Color(1f, 1f, 1f, 0.18f));
-        UIBuilder.Place((RectTransform)view.qualityButton.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(180f, -430f), new Vector2(380f, 44f));
-        view.qualityLabel = UIBuilder.LabelOf(view.qualityButton);
     }
 
     private static Slider VolumeRow(Transform page, string label, float y)

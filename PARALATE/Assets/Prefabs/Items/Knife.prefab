@@ -70,7 +70,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 73c176f402d2c2f4d929aa5da7585d17, type: 2}
+  - {fileID: 2100000, guid: ae98f8fac96514542b364142361e2759, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -157,6 +157,10 @@ MonoBehaviour:
   damage: 25
   attackRange: 2
   attackRate: 0.5
+  slashDuration: 0.45
+  hitDelay: 0.15
+  hitRadius: 0.35
+  slashTrigger: KnifeSlash
   raycastOffset: {x: 0, y: 0, z: 0}
   isHeld: 0
   attackAction: {fileID: 1120369429361536294, guid: 35845fe01580c41289b024647b1d1c53, type: 3}

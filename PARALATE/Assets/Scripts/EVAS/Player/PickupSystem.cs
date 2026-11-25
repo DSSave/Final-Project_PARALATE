@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -8,26 +7,24 @@ using UnityEngine.InputSystem;
 /// ของที่ผู้เล่นถือ แบ่งเป็น 4 ช่อง (เลือกด้วย WeaponWheel: Tab ค้าง + ลูกกลิ้ง)
 ///   Unarmed : มือเปล่า
 ///   Knife   : มีดติดตัวตั้งแต่เริ่ม (Knife Prefab) คลิกซ้ายฟันด้านหน้า (ดู KnifeAction)
-///   Command : ไอเทม/อาวุธที่เรียกด้วยสูตร CommandLine (Q + WASD)
-///             - Consumable (Medkit, X-Gear Cell): คลิกซ้ายเพื่อใช้ 1 ชิ้นจากคลัง หมดแล้วช่องว่าง
-///             - Weapon (USP, Sniper, AK): มีแม็กเดียว ยิงหมด = ปืนหายและติด Cooldown ตาม GunAction.commandCooldown
-///   X-Gear  : แขนกล คลิกซ้ายใช้ Active skill (ดู XGearSystem)
+///   Weapon  : ปืนที่ถือ 1 กระบอก
+///             - ว่างอยู่ = ปืนชิ้นแรกที่เก็บได้เข้าช่องนี้เอง
+///             - เปลี่ยนปืน = พิมพ์สูตร CommandLine ของปืนที่เป็นเจ้าของ (ปืนเดิมกลับเข้าคลัง กระสุนในแม็กถูกจำไว้)
+///             - ไม่มี Cooldown / ยิงหมดแม็กปืนไม่หาย รีโหลด (R) จากกระสุนในกระเป๋าตามปกติ
+///   X-Gear  : แขนกล คลิกซ้ายใช้ Active Chip ที่เรียกด้วย Command (ดู XGearSystem)
 ///
+/// ของใช้ (Medkit, X-Gear Cell): พิมพ์สูตร = ใช้ทันที หรือใช้จากหน้า Esc > Inventory (คลิกขวา > Use)
 /// เก็บปืน/มีดที่วางในฉาก (กด E) = เป็นเจ้าของถาวรในคลัง + ปลดล็อกสูตร Command ของอาวุธนั้น (ตัวปืนในฉากหายไป)
 /// </summary>
 [RequireComponent(typeof(PlayerInput))]
 public class PickupSystem : MonoBehaviour
 {
     [Header("Pickup Settings")]
-    [Tooltip("จุดที่มือถือปืน (ปืนที่เรียกด้วย Command จะถูกวางเป็นลูกของจุดนี้)")]
+    [Tooltip("จุดที่มือถือปืน (ปืนในช่อง Weapon จะถูกวางเป็นลูกของจุดนี้)")]
     public Transform PickUp;
 
     public Vector3 holdPositionOffset;
     public Vector3 holdRotationOffset;
-
-    [Header("UI")]
-    [Tooltip("ไม่บังคับ: ถ้าเว้นว่างจะหา AmmoUIManager ใน Scene เอง")]
-    public AmmoUIManager ammoUIManager;
 
     [Header("Weapon Wheel")]
     public WeaponWheelUI weaponWheel;
@@ -36,41 +33,42 @@ public class PickupSystem : MonoBehaviour
     [Tooltip("Prefab มีดที่ถือในช่อง Knife (Assets/Prefabs/Items/Knife.prefab)")]
     public GameObject knifePrefab;
 
-    [Header("Command Weapon")]
-    [Tooltip("ยิงนัดสุดท้ายแล้วรอกี่วินาทีก่อนปืนหาย (ให้เสียงยิงเล่นจบ)")]
-    public float dismissDelayAfterEmpty = 0.35f;
-
     /// <summary>ช่องที่ถือเปลี่ยน (ใช้เล่นเสียง/อัปเดต HUD)</summary>
     public event Action<HeldSlot> OnHeldSlotChanged;
 
-    /// <summary>ของในช่อง Command เปลี่ยน / จำนวนของใช้เปลี่ยน (HUD ใช้รีเฟรช)</summary>
+    /// <summary>ปืนในช่อง Weapon เปลี่ยน (HUD ใช้รีเฟรช)</summary>
     public event Action OnLoadoutChanged;
+
+    // ปืนในช่อง Weapon ติดตัวข้ามด่าน (PlayerPrefs เหมือนคลังถาวร)
+    private const string EquippedWeaponKey = "Weapon_Equipped";
+
+    // กระสุนในแม็กของปืนแต่ละกระบอก จำไว้ตอนสลับปืน (ใช้ได้ตลอดการเปิดเกม)
+    private static readonly Dictionary<string, int> loadedAmmo = new Dictionary<string, int>();
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => loadedAmmo.Clear();
 
     private HeldSlot currentSlot = HeldSlot.Unarmed;
     private GameObject knifeItem;
-    private CommandRecipe commandRecipe;
-    private GameObject commandWeapon;
-    private GunAction commandGun;
-    private Coroutine dismissRoutine;
+    private CommandRecipe weaponRecipe;
+    private GameObject weaponObject;
+    private GunAction weaponGun;
 
     private PlayerInput playerInput;
     private InputAction interactAction;
-    private InputAction fireAction;
     private TopDownPlayerController movementController;
     private KnockoutSystem knockoutSystem;
     private PickupDetector pickupDetector;
-    private bool searchedAmmoUI;
 
     public HeldSlot CurrentSlot => currentSlot;
     public GameObject HeldItem => GetItem(currentSlot);
-    public bool HasEquippedWeapon => HeldItem != null;
     public bool HasKnifeEquipped => currentSlot == HeldSlot.Knife && knifeItem != null;
 
-    /// <summary>สูตรที่อยู่ในช่อง Command (null = ว่าง)</summary>
-    public CommandRecipe CommandItem => commandRecipe;
+    /// <summary>สูตรของปืนในช่อง Weapon (null = ว่าง)</summary>
+    public CommandRecipe WeaponRecipe => weaponRecipe;
 
-    /// <summary>ปืนที่เรียกมา (null = ไม่ได้เรียกปืน)</summary>
-    public GunAction CommandGun => commandGun;
+    /// <summary>ปืนในช่อง Weapon (null = ว่าง)</summary>
+    public GunAction WeaponGun => weaponGun;
 
     /// <summary>ห้ามถืออาวุธทุกชนิด (โหมด Hub ใน Base): ถือได้แค่มือเปล่า</summary>
     public bool WeaponsBlocked { get; private set; }
@@ -97,7 +95,6 @@ public class PickupSystem : MonoBehaviour
     {
         playerInput = GetComponent<PlayerInput>();
         interactAction = playerInput.actions["Interact"];
-        fireAction = playerInput.actions.FindAction("Fire", false);
         movementController = GetComponent<TopDownPlayerController>();
         knockoutSystem = GetComponent<KnockoutSystem>();
         pickupDetector = GetComponent<PickupDetector>();
@@ -116,18 +113,19 @@ public class PickupSystem : MonoBehaviour
             if (knife != null)
                 knife.playerTransform = transform;
             SetWeaponHeld(knifeItem, false);
-            OnLoadoutChanged?.Invoke();
         }
-    }
 
-    void OnEnable()
-    {
-        PersistentInventory.OnChanged += HandleInventoryChanged;
+        // ปืนในช่อง Weapon จากด่านก่อน / เซฟ
+        CommandRecipe saved = FindWeaponRecipe(PlayerPrefs.GetString(EquippedWeaponKey, string.Empty));
+        if (saved != null && IsOwned(saved.itemId))
+            EquipWeapon(saved, false);
+
+        OnLoadoutChanged?.Invoke();
     }
 
     void OnDisable()
     {
-        PersistentInventory.OnChanged -= HandleInventoryChanged;
+        RememberLoadedAmmo();
     }
 
     void Update()
@@ -146,42 +144,22 @@ public class PickupSystem : MonoBehaviour
 
         if (pickupDetector != null && interactAction.WasPressedThisFrame())
             pickupDetector.TryInteract();
-
-        // ช่อง Command ที่เป็นของใช้: คลิกซ้ายเพื่อใช้
-        if (currentSlot == HeldSlot.Command && commandRecipe != null && commandRecipe.kind == CommandKind.Consumable &&
-            fireAction != null && fireAction.WasPressedThisFrame() && Time.timeScale > 0f &&
-            (weaponWheel == null || !weaponWheel.IsOpen) && !CommandLineUI.IsTyping)
-        {
-            UseConsumable();
-        }
     }
 
     // ------------------------------------------------------------ ข้อมูลช่อง
 
-    public static WeaponSlotType SlotTypeOf(GameObject item)
-    {
-        if (item == null)
-            return WeaponSlotType.Auto;
-
-        GunAction gun = item.GetComponent<GunAction>();
-        if (gun != null)
-            return gun.ResolvedSlot;
-
-        return item.GetComponent<KnifeAction>() != null ? WeaponSlotType.Secondary : WeaponSlotType.Auto;
-    }
-
-    /// <summary>GameObject ของช่องนั้น (มีแค่ช่อง Command ที่เป็นปืน)</summary>
+    /// <summary>GameObject ของช่องนั้น (Weapon = ปืน, Knife = มีด)</summary>
     public GameObject GetItem(HeldSlot slot)
     {
         switch (slot)
         {
-            case HeldSlot.Command: return commandWeapon;
+            case HeldSlot.Weapon: return weaponObject;
             case HeldSlot.Knife: return knifeItem;
             default: return null;
         }
     }
 
-    /// <summary>ช่องนี้เลือกถือได้ไหม (Unarmed และ X-Gear เลือกได้เสมอ, Command ต้องมีของ)</summary>
+    /// <summary>ช่องนี้เลือกถือได้ไหม (Unarmed และ X-Gear เลือกได้เสมอ, Weapon ต้องมีปืน)</summary>
     public bool IsSlotAvailable(HeldSlot slot)
     {
         switch (slot)
@@ -189,24 +167,12 @@ public class PickupSystem : MonoBehaviour
             case HeldSlot.Unarmed:
             case HeldSlot.XGear:
                 return true;
-            case HeldSlot.Command:
-                return commandRecipe != null;
+            case HeldSlot.Weapon:
+                return weaponObject != null;
             case HeldSlot.Knife:
                 return knifeItem != null;
             default:
                 return false;
-        }
-    }
-
-    /// <summary>จำนวนที่เหลือของของใช้ในช่อง Command (ปืน = -1)</summary>
-    public int CommandItemCount
-    {
-        get
-        {
-            if (commandRecipe == null || commandRecipe.kind != CommandKind.Consumable)
-                return -1;
-
-            return PersistentInventory.Instance != null ? PersistentInventory.Instance.GetAmount(commandRecipe.itemId) : 0;
         }
     }
 
@@ -220,32 +186,30 @@ public class PickupSystem : MonoBehaviour
         return display.Replace("(Clone)", string.Empty).Trim();
     }
 
-    public static string DescribeWeapon(GameObject weapon)
-    {
-        if (weapon == null)
-            return string.Empty;
+    private static bool IsOwned(string itemId) =>
+        PersistentInventory.Instance != null && PersistentInventory.Instance.Has(itemId);
 
-        GunAction gun = weapon.GetComponent<GunAction>();
-        if (gun != null)
+    /// <summary>สูตร Command ของปืน id นี้ (weapon_ak ฯลฯ)</summary>
+    private static CommandRecipe FindWeaponRecipe(string itemId)
+    {
+        if (string.IsNullOrEmpty(itemId))
+            return null;
+
+        IReadOnlyList<CommandRecipe> all = CommandBook.All;
+        for (int i = 0; i < all.Count; i++)
         {
-            return $"Damage {gun.EffectiveDamage:0.#}  (Headshot x{gun.HeadshotMultiplier:0.#})\n" +
-                   $"Fire rate {gun.fireRate:0.##}s  |  Magazine {gun.MagazineSize}\n" +
-                   $"Cooldown after the magazine: {gun.commandCooldown:0}s\n" +
-                   $"Upgrade Lv.{WeaponUpgrades.GetLevel(gun.UpgradeKey)}";
+            if (all[i] != null && all[i].kind == CommandKind.Weapon && all[i].itemId == itemId)
+                return all[i];
         }
 
-        KnifeAction knife = weapon.GetComponent<KnifeAction>();
-        if (knife != null)
-            return "Makes stealth kills from a strangle faster.";
-
-        return string.Empty;
+        return null;
     }
 
     // ------------------------------------------------------------ เก็บอาวุธในฉาก
 
     /// <summary>
     /// เก็บปืน/มีดที่วางในฉาก: เข้าคลังถาวร (มีชิ้นเดียวพอ) + ปลดล็อกสูตร Command แล้วลบตัวในฉากทิ้ง
-    /// คืน false ถ้าไม่ใช่อาวุธ
+    /// ช่อง Weapon ยังว่าง = ปืนชิ้นนี้เข้าช่องทันที คืน false ถ้าไม่ใช่อาวุธ
     /// </summary>
     public bool PickUpObject(GameObject item)
     {
@@ -258,6 +222,14 @@ public class PickupSystem : MonoBehaviour
             inventory.Add(weaponId, 1);
 
         CommandBook.LearnFromItem(weaponId);
+
+        if (weaponObject == null && !WeaponsBlocked)
+        {
+            CommandRecipe recipe = FindWeaponRecipe(weaponId);
+            if (recipe != null)
+                EquipWeapon(recipe, false);
+        }
+
         Destroy(item);
         return true;
     }
@@ -265,8 +237,11 @@ public class PickupSystem : MonoBehaviour
     // ------------------------------------------------------------ Command
 
     /// <summary>
-    /// ใส่ของตามสูตรลงช่อง Command แล้วถือขึ้นมาทันที
-    /// คืน false พร้อมเหตุผล ถ้าไม่มีของในคลัง / ปืนติด Cooldown / ไม่มี Prefab
+    /// ทำตามสูตร CommandLine (ยกเว้น SaveGame ที่ CommandLineUI จัดการเอง)
+    ///   Weapon     : เปลี่ยนปืนในช่อง Weapon แล้วถือขึ้นมา
+    ///   Consumable : ใช้ของทันที
+    ///   XGearChip  : ใส่ Active Chip เข้าช่อง X-Gear แล้วถือ X-Gear
+    /// คืน false พร้อมเหตุผลถ้าทำไม่ได้
     /// </summary>
     public bool TryLoadCommand(CommandRecipe recipe, out string reason)
     {
@@ -284,67 +259,175 @@ public class PickupSystem : MonoBehaviour
             return false;
         }
 
-        PersistentInventory inventory = PersistentInventory.Instance;
-        bool owned = inventory != null && inventory.Has(recipe.itemId);
-
-        if (recipe.kind == CommandKind.Consumable)
+        switch (recipe.kind)
         {
-            if (!owned)
-            {
-                reason = "No " + ItemCatalog.NameOf(recipe.itemId) + " left";
-                return false;
-            }
+            case CommandKind.Consumable:
+                return UseConsumable(recipe.itemId, out reason);
 
-            ClearCommand();
-            commandRecipe = recipe;
-        }
-        else if (recipe.kind == CommandKind.Weapon)
-        {
-            if (!owned)
-            {
-                reason = ItemCatalog.NameOf(recipe.itemId) + " not owned";
-                return false;
-            }
+            case CommandKind.Weapon:
+                if (!IsOwned(recipe.itemId))
+                {
+                    reason = ItemCatalog.NameOf(recipe.itemId) + " not owned";
+                    return false;
+                }
 
-            float cooldown = CommandBook.CooldownRemaining(recipe);
-            if (cooldown > 0f)
-            {
-                reason = $"{recipe.displayName} cooldown {cooldown:0}s";
-                return false;
-            }
+                if (recipe.weaponPrefab == null)
+                {
+                    reason = recipe.displayName + " has no weapon prefab (ItemData)";
+                    return false;
+                }
 
-            // เรียกปืนกระบอกเดิมซ้ำ (ยังมีกระสุน) = ถือขึ้นมาเฉยๆ ไม่เติมแม็ก
-            if (commandRecipe == recipe && commandWeapon != null)
-            {
-                Select(HeldSlot.Command);
+                if (weaponRecipe != recipe || weaponObject == null)
+                    EquipWeapon(recipe, false);
+
+                Select(HeldSlot.Weapon);
                 return true;
-            }
 
-            if (recipe.weaponPrefab == null)
-            {
-                reason = recipe.displayName + " has no weapon prefab (Resources/CommandBook)";
+            case CommandKind.XGearChip:
+                XGearSystem gear = GetComponent<XGearSystem>();
+                if (gear == null || !gear.LoadChip(recipe.itemId, out reason))
+                {
+                    reason ??= "No X-Gear";
+                    return false;
+                }
+
+                Select(HeldSlot.XGear);
+                return true;
+
+            default:
+                reason = "This command does not load an item";
                 return false;
-            }
+        }
+    }
 
-            ClearCommand();
-            commandRecipe = recipe;
-            SpawnCommandWeapon(recipe.weaponPrefab);
-        }
-        else
-        {
-            reason = "This command does not load an item";
-            return false;
-        }
+    /// <summary>ใส่ปืนตามสูตรเข้าช่อง Weapon (ปืนเดิมกลับเข้าคลัง กระสุนในแม็กถูกจำไว้)</summary>
+    void EquipWeapon(CommandRecipe recipe, bool select)
+    {
+        bool wasHolding = currentSlot == HeldSlot.Weapon;
+        RemoveWeaponObject();
+
+        weaponRecipe = recipe;
+        weaponObject = SpawnHeld(recipe.weaponPrefab);
+        weaponGun = weaponObject.GetComponent<GunAction>();
+
+        if (weaponGun != null && loadedAmmo.TryGetValue(recipe.itemId, out int ammo))
+            weaponGun.SetLoadedAmmo(ammo);
+
+        SetWeaponHeld(weaponObject, false);
+        PlayerPrefs.SetString(EquippedWeaponKey, recipe.itemId);
+        PlayerPrefs.Save();
 
         OnLoadoutChanged?.Invoke();
 
-        // ถืออยู่ช่อง Command อยู่แล้ว: บังคับเปิดปืนใหม่ให้ถือ
-        if (currentSlot == HeldSlot.Command)
+        // ถือช่อง Weapon อยู่: ถือปืนกระบอกใหม่ต่อทันที
+        if (wasHolding || select)
         {
             currentSlot = HeldSlot.Unarmed;
+            Select(HeldSlot.Weapon);
+        }
+    }
+
+    void RemoveWeaponObject()
+    {
+        RememberLoadedAmmo();
+
+        if (weaponObject != null)
+        {
+            SetWeaponHeld(weaponObject, false);
+            Destroy(weaponObject);
         }
 
-        Select(HeldSlot.Command);
+        weaponObject = null;
+        weaponGun = null;
+        weaponRecipe = null;
+    }
+
+    void RememberLoadedAmmo()
+    {
+        if (weaponGun != null && weaponRecipe != null)
+            loadedAmmo[weaponRecipe.itemId] = weaponGun.CurrentAmmo;
+    }
+
+    // ------------------------------------------------------------ ของใช้ (Command / หน้า Inventory)
+
+    /// <summary>ปริมาณต่อการใช้ 1 ชิ้น (ตั้งใน ItemData ส่วน CommandLine > Effect Amount)</summary>
+    public static float EffectAmountOf(string itemId)
+    {
+        IReadOnlyList<CommandRecipe> all = CommandBook.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i] != null && all[i].kind == CommandKind.Consumable && all[i].itemId == itemId)
+                return all[i].effectAmount;
+        }
+
+        return itemId == ItemCatalog.Medkit ? 30f : 1f;
+    }
+
+    /// <summary>ใช้ของ 1 ชิ้นจากคลัง (Medkit = ฟื้นเลือด, X-Gear Cell = เติม Charge) คืน false + เหตุผลถ้าใช้ไม่ได้</summary>
+    public bool UseConsumable(string itemId, out string reason)
+    {
+        reason = null;
+        PersistentInventory inventory = PersistentInventory.Instance;
+
+        if (inventory == null || !inventory.Has(itemId))
+        {
+            reason = "No " + ItemCatalog.NameOf(itemId) + " left";
+            return false;
+        }
+
+        float amount = EffectAmountOf(itemId);
+        bool used = false;
+
+        if (itemId == ItemCatalog.Medkit)
+        {
+            PlayerHealth health = GetComponent<PlayerHealth>();
+            used = health != null && health.Heal(amount);
+            if (!used) reason = "Health is full";
+        }
+        else if (itemId == ItemCatalog.XGearCell)
+        {
+            XGearSystem gear = GetComponent<XGearSystem>();
+            used = gear != null && gear.AddCharges(Mathf.Max(1, Mathf.RoundToInt(amount)), out reason);
+        }
+        else
+        {
+            reason = ItemCatalog.NameOf(itemId) + " can't be used";
+        }
+
+        if (!used)
+            return false;
+
+        SfxLibrary.Play(itemId == ItemCatalog.Medkit ? "medkit_use" : "xgear_activate");
+        inventory.TrySpend(itemId, 1);
+        return true;
+    }
+
+    // ------------------------------------------------------------ เลือกช่อง
+
+    /// <summary>เลือกช่องที่จะถือ (เรียกจากวงล้อ Tab) ช่องว่างจะถูกปฏิเสธ</summary>
+    public bool Select(HeldSlot slot)
+    {
+        if (!IsSlotAvailable(slot))
+            return false;
+
+        if (WeaponsBlocked && slot != HeldSlot.Unarmed)
+            return false;
+
+        GameObject target = GetItem(slot);
+
+        // ถือชิ้นนี้อยู่แล้ว ไม่ต้องปิด/เปิดใหม่ (กันเสียง equip เล่นซ้ำ)
+        if (slot == currentSlot && (target == null || target.activeSelf))
+            return true;
+
+        SetWeaponHeld(weaponObject, false);
+        SetWeaponHeld(knifeItem, false);
+
+        currentSlot = slot;
+
+        if (target != null)
+            SetWeaponHeld(target, true);
+
+        OnHeldSlotChanged?.Invoke(slot); // Weapon HUD (WeaponWheelUI) ฟัง event นี้
         return true;
     }
 
@@ -371,147 +454,6 @@ public class PickupSystem : MonoBehaviour
         return item;
     }
 
-    void SpawnCommandWeapon(GameObject prefab)
-    {
-        commandWeapon = SpawnHeld(prefab);
-
-        commandGun = commandWeapon.GetComponent<GunAction>();
-        if (commandGun != null)
-        {
-            commandGun.SetCommandMode(true);
-            commandGun.OnMagazineEmptied += HandleMagazineEmptied;
-        }
-
-        SetWeaponHeld(commandWeapon, false);
-    }
-
-    void HandleMagazineEmptied()
-    {
-        if (dismissRoutine != null)
-            StopCoroutine(dismissRoutine);
-
-        dismissRoutine = StartCoroutine(DismissAfterDelay());
-    }
-
-    IEnumerator DismissAfterDelay()
-    {
-        yield return new WaitForSeconds(dismissDelayAfterEmpty);
-        dismissRoutine = null;
-        ClearCommand();
-    }
-
-    /// <summary>
-    /// ล้างช่อง Command: ปืนที่เรียกมาหายไป ถ้ายิงไปแล้วอย่างน้อย 1 นัด จะเริ่ม Cooldown ของปืนนั้น
-    /// (กันเรียกซ้ำเพื่อเติมแม็กฟรี)
-    /// </summary>
-    public void ClearCommand()
-    {
-        if (dismissRoutine != null)
-        {
-            StopCoroutine(dismissRoutine);
-            dismissRoutine = null;
-        }
-
-        bool wasHolding = currentSlot == HeldSlot.Command;
-
-        if (commandGun != null)
-        {
-            commandGun.OnMagazineEmptied -= HandleMagazineEmptied;
-
-            if (commandGun.CurrentAmmo < commandGun.MagazineSize)
-                CommandBook.StartCooldown(commandRecipe, commandGun.commandCooldown);
-        }
-
-        if (commandWeapon != null)
-        {
-            SetWeaponHeld(commandWeapon, false);
-            Destroy(commandWeapon);
-        }
-
-        commandWeapon = null;
-        commandGun = null;
-        commandRecipe = null;
-
-        if (wasHolding)
-            Select(HeldSlot.Unarmed);
-
-        OnLoadoutChanged?.Invoke();
-    }
-
-    void UseConsumable()
-    {
-        PersistentInventory inventory = PersistentInventory.Instance;
-        if (commandRecipe == null || inventory == null || !inventory.Has(commandRecipe.itemId))
-        {
-            ClearCommand();
-            return;
-        }
-
-        string reason = null;
-        bool used = false;
-
-        if (commandRecipe.itemId == ItemCatalog.Medkit)
-        {
-            PlayerHealth health = GetComponent<PlayerHealth>();
-            used = health != null && health.Heal(commandRecipe.effectAmount);
-            if (!used) reason = "Health is full";
-        }
-        else if (commandRecipe.itemId == ItemCatalog.XGearCell)
-        {
-            XGearSystem gear = GetComponent<XGearSystem>();
-            used = gear != null && gear.AddCharges(Mathf.Max(1, Mathf.RoundToInt(commandRecipe.effectAmount)), out reason);
-        }
-
-        if (!used)
-        {
-            SfxLibrary.Play("ui_error");
-            if (!string.IsNullOrEmpty(reason))
-                HudToast.Show(reason);
-            return;
-        }
-
-        SfxLibrary.Play(commandRecipe.itemId == ItemCatalog.Medkit ? "medkit_use" : "xgear_activate");
-        inventory.TrySpend(commandRecipe.itemId, 1); // OnChanged → HandleInventoryChanged เคลียร์ช่องเองถ้าหมด
-    }
-
-    void HandleInventoryChanged()
-    {
-        if (commandRecipe != null && commandRecipe.kind == CommandKind.Consumable && CommandItemCount <= 0)
-            ClearCommand();
-        else
-            OnLoadoutChanged?.Invoke();
-    }
-
-    // ------------------------------------------------------------ เลือกช่อง
-
-    /// <summary>เลือกช่องที่จะถือ (เรียกจากวงล้อ Tab) ช่องว่างจะถูกปฏิเสธ</summary>
-    public bool Select(HeldSlot slot)
-    {
-        if (!IsSlotAvailable(slot))
-            return false;
-
-        if (WeaponsBlocked && slot != HeldSlot.Unarmed)
-            return false;
-
-        GameObject target = GetItem(slot);
-
-        // ถือชิ้นนี้อยู่แล้ว ไม่ต้องปิด/เปิดใหม่ (กันเสียง equip เล่นซ้ำ)
-        if (slot == currentSlot && (target == null || target.activeSelf))
-            return true;
-
-        SetWeaponHeld(commandWeapon, false);
-        SetWeaponHeld(knifeItem, false);
-
-        currentSlot = slot;
-
-        if (target != null)
-            SetWeaponHeld(target, true);
-
-        RefreshWeaponHud();
-        OnHeldSlotChanged?.Invoke(slot);
-        return true;
-    }
-
     void SetWeaponHeld(GameObject item, bool held)
     {
         if (item == null)
@@ -528,35 +470,21 @@ public class PickupSystem : MonoBehaviour
             knife.isHeld = held;
     }
 
-    void RefreshWeaponHud()
+    /// <summary>ล้างปืนที่ติดตัวข้ามด่าน (เมนูรีเซ็ตเซฟใช้)</summary>
+    public static void ResetSave()
     {
-        if (ammoUIManager == null && !searchedAmmoUI)
+        PlayerPrefs.DeleteKey(EquippedWeaponKey);
+        loadedAmmo.Clear();
+    }
+
+    /// <summary>id ของปืนในช่อง Weapon ที่บันทึกไว้ (ระบบเซฟใช้)</summary>
+    public static string SavedWeaponId
+    {
+        get => PlayerPrefs.GetString(EquippedWeaponKey, string.Empty);
+        set
         {
-            searchedAmmoUI = true;
-            ammoUIManager = FindAnyObjectByType<AmmoUIManager>(FindObjectsInactive.Include);
+            PlayerPrefs.SetString(EquippedWeaponKey, value ?? string.Empty);
+            PlayerPrefs.Save();
         }
-
-        if (ammoUIManager == null)
-            return;
-
-        if (currentSlot == HeldSlot.XGear)
-            ammoUIManager.SetLabelOnly("X-GEAR");
-        else
-            ammoUIManager.SetActiveWeapon(HeldItem);
-    }
-
-    // ------------------------------------------------------------ ของเดิม (ยังมีสคริปต์อื่นเรียกใช้)
-
-    /// <summary>ปืนที่ถืออยู่ตอนนี้ (มีได้แค่ปืนที่เรียกด้วย Command)</summary>
-    public List<GameObject> GetOwnedWeapons()
-    {
-        List<GameObject> weapons = new List<GameObject>();
-        if (commandWeapon != null) weapons.Add(commandWeapon);
-        return weapons;
-    }
-
-    public void UnequipWeaponPublic()
-    {
-        Select(HeldSlot.Unarmed);
     }
 }

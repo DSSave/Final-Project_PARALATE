@@ -3,13 +3,17 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// HUD อาวุธมุมขวาล่าง (แนวตั้ง):
-///   - ปกติ: โชว์แถวเดียว = ช่องที่ถืออยู่ (ชื่อช่อง, ชื่อของ, กระสุน)
-///   - กด Tab ค้าง: กางเป็น 4 แถว Unarmed / Knife / Command / X-Gear
+///   - ปกติ: ซ่อนอยู่ (Auto Hide) / เปลี่ยนอาวุธแล้วโชว์แถวเดียว = ช่องที่ถืออยู่ ค้างไว้ 1 วิ แล้วจางหาย
+///   - กด Tab ค้าง: กางเป็น 4 แถว (บนลงล่าง) X-Gear / Weapon / Knife / Unarmed
 ///     เลื่อนลูกกลิ้งเพื่อเปลี่ยน (มีเสียง + แถวที่เลือกเปลี่ยนสีและยื่นออกมา) ปล่อย Tab เพื่อยืนยัน
-///   - Command: ของที่เรียกด้วย CommandLine (Q) ของใช้มีตัวเลขจำนวนเล็กๆ มุมขวาล่าง / ปืนแสดงกระสุนในแม็ก
+///     ลำดับการเลื่อนตามตำแหน่งแถวบนจอ (ย้ายแถวใน Prefab ได้ ลูกกลิ้งเลื่อนตามลำดับใหม่เอง)
+///   - Weapon: ปืนที่ถือ แสดง กระสุนในแม็ก / กระสุนในกระเป๋า (เปลี่ยนปืนด้วย Command)
+///   - X-Gear: Active Chip ที่เรียกด้วย Command และจำนวน Charge ที่เหลือ
 ///
-/// หน้าตาอยู่ใน Prefab Resources/UI/WeaponHUD (WeaponHudView) จัดตำแหน่ง/สี/ฟอนต์ใน Editor ได้
-/// สคริปต์นี้คุมแค่การทำงาน (ช่อง Wheel Panel / Slot เดิมไม่ใช้แล้ว เก็บไว้เพื่อไม่ให้ค่าใน Scene เดิมหาย)
+/// หน้าตา = WeaponHudView ที่วางอยู่ใน Prefab MainHUD (ตัวเดียวกับ Resources/UI/WeaponHUD แบบ Nested Prefab)
+///   ปรับตำแหน่ง/สี/ฟอนต์/เวลาซ่อนอัตโนมัติ ได้ที่ MainHUD > WeaponHUD หรือเปิด Prefab WeaponHUD แก้ทุกที่พร้อมกัน
+///   Scene ที่ไม่มี MainHUD จะสร้างจาก Resources/UI/WeaponHUD ให้เอง
+/// สคริปต์นี้คุมแค่การทำงาน
 /// </summary>
 public class WeaponWheelUI : MonoBehaviour
 {
@@ -17,18 +21,21 @@ public class WeaponWheelUI : MonoBehaviour
     public PickupSystem pickupSystem;
     public PlayerInput playerInput;
 
-    [Header("UI เดิม (ไม่ใช้แล้ว จะถูกซ่อน)")]
-    public GameObject wheelPanel;
-    public Transform slotContainer;
-    public WeaponSlotUI slotPrefab;
-
     [Header("Behaviour")]
     [Tooltip("ชะลอเวลาตอนเปิดแถบ (1 = ปกติ, 0.2 = slow motion)")]
     [Range(0.05f, 1f)] public float timeScaleWhileOpen = 0.2f;
     [Tooltip("ค่า scroll ขั้นต่ำที่นับเป็น 1 คลิก")]
     public float scrollThreshold = 0.1f;
 
-    private static readonly HeldSlot[] Order = { HeldSlot.Unarmed, HeldSlot.Knife, HeldSlot.Command, HeldSlot.XGear };
+    // ค่าซ่อน/แสดงอัตโนมัติอยู่ที่ WeaponHudView (ปรับที่ตัว HUD ใน MainHUD ได้เลย)
+    private CanvasGroup hudGroup;
+    private bool ownsView; // สร้าง HUD เอง (Scene ไม่มี MainHUD) = ต้องลบเองตอนจบ
+    private float hideAt; // เวลา (unscaled) ที่เริ่มจาง
+
+    // ลำดับตรงกับ WeaponHudView.rows (ห้ามสลับ) — ลำดับบนจอดูจากตำแหน่งแถว (visualOrder)
+    private static readonly HeldSlot[] Order = { HeldSlot.Unarmed, HeldSlot.Knife, HeldSlot.Weapon, HeldSlot.XGear };
+    private int[] visualOrder = { 0, 1, 2, 3 }; // index ของแถว เรียงจากบนลงล่างตามตำแหน่งใน Prefab
+    private XGearSystem xgear;
 
     private InputAction wheelAction;
     private InputAction scrollAction;
@@ -57,21 +64,10 @@ public class WeaponWheelUI : MonoBehaviour
             wheelAction = playerInput.actions["WeaponWheel"];
             scrollAction = playerInput.actions["ScrollWeapon"];
         }
-
-        if (wheelPanel != null)
-            wheelPanel.SetActive(false);
     }
 
     void Start()
     {
-        // กล่อง WeaponHUD เดิมของ MainHUD: ซ่อนถาวร HUD นี้แสดงแทนทั้งหมด
-        AmmoUIManager oldHud = pickupSystem != null && pickupSystem.ammoUIManager != null
-            ? pickupSystem.ammoUIManager
-            : FindAnyObjectByType<AmmoUIManager>(FindObjectsInactive.Include);
-
-        if (oldHud != null)
-            oldHud.SetSuppressed(true);
-
         EnsureUI();
         RefreshAll();
     }
@@ -84,7 +80,7 @@ public class WeaponWheelUI : MonoBehaviour
             pickupSystem.OnLoadoutChanged += RefreshAll;
         }
 
-        XGearLoadout.OnChanged += RefreshAll;
+        XGearSystem.OnChanged += RefreshAll;
 
         if (view != null)
         {
@@ -101,7 +97,7 @@ public class WeaponWheelUI : MonoBehaviour
             pickupSystem.OnLoadoutChanged -= RefreshAll;
         }
 
-        XGearLoadout.OnChanged -= RefreshAll;
+        XGearSystem.OnChanged -= RefreshAll;
 
         // กัน timeScale ค้างตอน disable กลางคัน
         if (isOpen)
@@ -116,7 +112,8 @@ public class WeaponWheelUI : MonoBehaviour
 
     void OnDestroy()
     {
-        if (view != null)
+        // HUD ที่วางไว้ใน MainHUD เป็นของ MainHUD ไม่ลบ
+        if (view != null && ownsView)
             Destroy(view.gameObject);
     }
 
@@ -134,6 +131,7 @@ public class WeaponWheelUI : MonoBehaviour
             return;
 
         UpdateHeldAmmo();
+        UpdateAutoHide();
 
         if (wheelAction == null)
             return;
@@ -171,13 +169,15 @@ public class WeaponWheelUI : MonoBehaviour
         if (Mathf.Abs(scroll) < scrollThreshold)
             return;
 
-        // เลื่อนลง = ไปแถวถัดไป (ล่าง) ข้ามช่องที่ยังไม่มีของ
+        // เลื่อนลง = ไปแถวที่อยู่ล่างลงไปบนจอ / เลื่อนขึ้น = แถวบน ข้ามช่องที่ยังไม่มีของ
         int direction = scroll > 0f ? -1 : 1;
+        int visual = System.Array.IndexOf(visualOrder, selectedIndex);
         int index = selectedIndex;
 
-        for (int i = 0; i < Order.Length; i++)
+        for (int i = 0; i < visualOrder.Length; i++)
         {
-            index = (index + direction + Order.Length) % Order.Length;
+            visual = (visual + direction + visualOrder.Length) % visualOrder.Length;
+            index = visualOrder[visual];
             if (pickupSystem.IsSlotAvailable(Order[index]))
                 break;
         }
@@ -198,13 +198,38 @@ public class WeaponWheelUI : MonoBehaviour
         if (pickupSystem.CanChangeWeapon)
             pickupSystem.Select(Order[selectedIndex]);
 
+        ShowForAWhile(); // ปล่อย Tab: ค้างไว้ให้เห็นอาวุธที่เลือก แล้วค่อยหาย
         RefreshAll();
     }
 
     void HandleHeldSlotChanged(HeldSlot slot)
     {
         SfxLibrary.PlayUI(slot == HeldSlot.Unarmed ? "weapon_unequip" : "weapon_switch");
+        ShowForAWhile(); // เปลี่ยนอาวุธด้วยวิธีอื่น (Command, เก็บปืน) ก็ขึ้นให้เห็นสักครู่
         RefreshAll();
+    }
+
+    // ------------------------------------------------------------ ซ่อน HUD อัตโนมัติ
+    // หลักการ: ใช้ CanvasGroup.alpha ของ HUD (ไม่ปิด GameObject) แถวต่างๆ จึงยังอยู่ที่เดิมและอัปเดตค่ากระสุนต่อได้
+    // เวลาใช้ unscaledTime เพราะตอนกด Tab เกมถูกชะลอ (timeScale 0.2)
+
+    void ShowForAWhile()
+    {
+        hideAt = Time.unscaledTime + (view != null ? view.showAfterChangeSeconds : 1f);
+    }
+
+    void UpdateAutoHide()
+    {
+        if (hudGroup == null)
+            return;
+
+        bool visible = !view.autoHide || isOpen || Time.unscaledTime < hideAt;
+        float target = visible ? 1f : 0f;
+
+        if (visible || view.fadeOutSeconds <= 0f)
+            hudGroup.alpha = target; // ขึ้นทันที
+        else
+            hudGroup.alpha = Mathf.MoveTowards(hudGroup.alpha, target, Time.unscaledDeltaTime / view.fadeOutSeconds);
     }
 
     static int IndexOf(HeldSlot slot)
@@ -218,11 +243,11 @@ public class WeaponWheelUI : MonoBehaviour
         switch (slot)
         {
             case HeldSlot.XGear:
-                string active = XGearLoadout.ActiveId;
-                return string.IsNullOrEmpty(active) ? "No active chip" : ItemCatalog.NameOf(active);
-            case HeldSlot.Command:
-                CommandRecipe recipe = pickupSystem.CommandItem;
-                return recipe != null ? recipe.displayName : "Empty  (Q)";
+                string chip = xgear != null ? xgear.LoadedChip : string.Empty;
+                return string.IsNullOrEmpty(chip) ? "No chip  (Q)" : ItemCatalog.NameOf(chip).Replace("Active Chip : ", string.Empty);
+            case HeldSlot.Weapon:
+                GameObject weapon = pickupSystem.GetItem(HeldSlot.Weapon);
+                return weapon != null ? PickupSystem.DisplayNameOf(weapon) : "Empty  (Q)";
             case HeldSlot.Knife:
                 GameObject knife = pickupSystem.GetItem(HeldSlot.Knife);
                 return knife != null ? PickupSystem.DisplayNameOf(knife) : "No knife";
@@ -238,12 +263,31 @@ public class WeaponWheelUI : MonoBehaviour
         if (view != null)
             return;
 
-        view = UIPrefabs.Spawn(WeaponHudView.PrefabName, WeaponHudView.BuildDefault);
+        // ใช้ HUD ที่วางไว้ใน MainHUD ก่อน (ปรับตำแหน่ง/สีใน Prefab MainHUD ได้) ไม่มีค่อยสร้างจาก Resources/UI/WeaponHUD
+        view = FindAnyObjectByType<WeaponHudView>(FindObjectsInactive.Include);
+        ownsView = view == null;
+        if (view == null)
+            view = UIPrefabs.Spawn(WeaponHudView.PrefabName, WeaponHudView.BuildDefault);
+        view.gameObject.SetActive(true);
+
+        // ซ่อน/แสดงทั้ง HUD ด้วย CanvasGroup (มีใน Prefab แล้วใช้ตัวนั้น ไม่มีก็เพิ่มให้ตอนรัน)
+        hudGroup = view.GetComponent<CanvasGroup>();
+        if (hudGroup == null)
+            hudGroup = view.gameObject.AddComponent<CanvasGroup>();
+        hudGroup.blocksRaycasts = false;
+        hudGroup.interactable = false;
+        hudGroup.alpha = view.autoHide ? 0f : 1f; // เริ่มฉาก: ซ่อนไว้จนกว่าจะกด Tab
 
         // จำตำแหน่งของแต่ละแถวที่จัดไว้ใน Prefab = ตำแหน่งตอนกางออก
         openPositions = new Vector2[view.rows.Length];
         for (int i = 0; i < view.rows.Length; i++)
             openPositions[i] = view.rows[i] != null ? view.rows[i].Rect.anchoredPosition : Vector2.zero;
+
+        // ลำดับบนจอ (บนลงล่าง) จากตำแหน่ง Y ของแต่ละแถว ใช้กับลูกกลิ้ง
+        int count = Mathf.Min(Order.Length, view.rows.Length);
+        visualOrder = new int[count];
+        for (int i = 0; i < count; i++) visualOrder[i] = i;
+        System.Array.Sort(visualOrder, (a, b) => openPositions[b].y.CompareTo(openPositions[a].y));
     }
 
     // จัดแถว + ข้อความทั้งหมดใหม่ (เรียกเฉพาะตอนมีอะไรเปลี่ยน ไม่ได้เรียกทุกเฟรม)
@@ -251,6 +295,10 @@ public class WeaponWheelUI : MonoBehaviour
     {
         if (view == null || pickupSystem == null)
             return;
+
+        // XGearSystem ถูกเพิ่มให้ผู้เล่นตอน Start (PlayerSystems) จึงหาทีหลัง
+        if (xgear == null)
+            xgear = GetComponent<XGearSystem>();
 
         int heldIndex = IndexOf(pickupSystem.CurrentSlot);
         if (!isOpen)
@@ -300,8 +348,8 @@ public class WeaponWheelUI : MonoBehaviour
 
             if (row.count != null)
             {
-                int count = slot == HeldSlot.Command ? pickupSystem.CommandItemCount : -1;
-                row.count.text = count > 0 ? "x" + count : string.Empty;
+                // X-Gear: Charge ที่เหลือ / สูงสุด
+                row.count.text = slot == HeldSlot.XGear && xgear != null ? xgear.Charges + "/" + xgear.MaxCharges : string.Empty;
                 row.count.color = textColor;
             }
 
@@ -330,10 +378,7 @@ public class WeaponWheelUI : MonoBehaviour
 
     static string AmmoLabel(GunAction gun)
     {
-        // ปืนจาก Command มีแม็กเดียว: แสดง กระสุนที่เหลือ / ขนาดแม็ก
-        if (gun.CommandMode)
-            return gun.CurrentAmmo + " / " + gun.MagazineSize;
-
+        // กระสุนในแม็ก / กระสุนในกระเป๋า
         return gun.IsReloading ? "RELOAD" : gun.CurrentAmmo + " / " + gun.ReserveAmmo;
     }
 

@@ -66,7 +66,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 7059358587398334519, guid: 8b7f7c65a4b3437489e590b8efb5ec7b, type: 3}
+  - {fileID: 2100000, guid: e0e5d2c9c3288d84ebd5d1726a19242e, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -373,6 +373,7 @@ MonoBehaviour:
   slotType: 0
   headshotMultiplier: 0
   forceScopeOverlay: 0
+  aimStyle: 0
   hitMask:
     serializedVersion: 2
     m_Bits: 32755
@@ -381,7 +382,6 @@ MonoBehaviour:
   reloadDuration: 4
   reloadMovementSpeedMultiplier: 0.5
   autoReloadWhenEmpty: 0
-  commandCooldown: 30
   crosshairUI: {fileID: 0}
   isHeld: 0
   showDebugLine: 1
@@ -602,7 +602,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 7059358587398334519, guid: 8b7f7c65a4b3437489e590b8efb5ec7b, type: 3}
+  - {fileID: 2100000, guid: e0e5d2c9c3288d84ebd5d1726a19242e, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

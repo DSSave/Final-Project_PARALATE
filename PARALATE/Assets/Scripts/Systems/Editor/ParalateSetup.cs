@@ -122,7 +122,7 @@ public static class ParalateSetup
         body.transform.localScale = new Vector3(0.2f, 0.18f, 0.45f);
         Object.DestroyImmediate(body.GetComponent<Collider>());
 
-        // ใช้ Material ของโปรเจกต์ (Primitive ที่สร้างจากโค้ดจะได้ Material มาตรฐานซึ่งเป็นสีชมพูใน HDRP)
+        // ใช้ Material ของโปรเจกต์ (Primitive ที่สร้างจากโค้ดจะได้ Material มาตรฐานซึ่งเป็นสีชมพูใน URP)
         Material material = FindProjectMaterial();
         if (material != null)
         {

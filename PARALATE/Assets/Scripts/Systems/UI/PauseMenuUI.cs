@@ -6,25 +6,30 @@ using UnityEngine.UI;
 
 /// <summary>
 /// เมนูตอนกด Esc ในเกม (ทุก Scene ที่มีผู้เล่น): เนื้อหาซ้าย / เมนูขวา
-///   Inventory : ตารางช่องของ (อาวุธที่เป็นเจ้าของ, ของใช้, กระสุน, Scrap, Metal, ชิป, Keycard)
+///   Inventory : ซ้าย = รูปของที่ชี้ + คำอธิบาย / ขวา = ตาราง Inventory (Keycard, กุญแจ, อาวุธ, กระสุน, วัตถุดิบ)
+///               และตาราง Consumable (Medkit, X-Gear Cell) คลิกขวา = Use / Drop
+///   X-Gear    : ซ้าย = รูป X-Gear (คงที่) + คำอธิบาย / ขวา = ชิป Active, Passive, Map ที่มี
 ///   Logs      : แท็บ Log = Memo กดหัวข้อเพื่อเปิดอ่าน (GameLog / Resources/Logs)
 ///               แท็บ Command = สูตรลูกศรของไอเทมที่เคยเก็บแล้ว (CommandBook)
-///   Setting   : Fullscreen + เสียง Main / Music / SFX + คุณภาพกราฟิก
+///   Setting   : Fullscreen + เสียง Main / Music / SFX
 ///   Exit      : ถามยืนยัน Yes / No
 ///
-/// หน้าตาทั้งหมดอยู่ใน Prefab Resources/UI/PauseMenu (PauseMenuView) จัดตำแหน่ง/สี/ฟอนต์ใน Editor ได้
+/// หน้าตาอยู่ใน Prefab Resources/UI/PauseMenu (PauseMenuView) ซึ่งวางซ้อนอยู่ใน Prefab MainHUD ด้วย
+///   แก้ที่ MainHUD > PauseMenu ได้เลย / Scene ที่ไม่มี MainHUD จะสร้างจาก Resources/UI/PauseMenu ให้เอง
 /// สคริปต์นี้เติมข้อมูล ผูกปุ่ม และ Clone Template ของรายการที่ซ้ำ
 /// เปิดเมนู = หยุดเวลา (Time.timeScale = 0) และล็อกผู้เล่นด้วยระบบล็อกแบบมีเจ้าของ
 /// </summary>
 public class PauseMenuUI : MonoBehaviour
 {
-    private enum Page { Inventory, Logs, Setting, Exit }
+    private enum Page { Inventory, XGear, Logs, Setting, Exit }
     private enum LogTab { Log, Command }
 
     private TopDownPlayerController player;
     private PickupSystem pickup;
 
     private PauseMenuView view;
+    private bool ownsView; // สร้างหน้าต่างเอง (Scene ไม่มี MainHUD) = ต้องลบเองตอนจบ
+    private string contextItemId; // ของที่คลิกขวาอยู่ (เมนู Use / Drop)
     private Page currentPage = Page.Inventory;
     private LogTab currentLogTab = LogTab.Log;
     private bool isOpen;
@@ -65,7 +70,8 @@ public class PauseMenuUI : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (view != null)
+        // หน้าต่างที่วางไว้ใน MainHUD เป็นของ MainHUD ไม่ลบ
+        if (view != null && ownsView)
             Destroy(view.gameObject);
     }
 
@@ -161,7 +167,11 @@ public class PauseMenuUI : MonoBehaviour
         if (view != null)
             return;
 
-        view = UIPrefabs.Spawn(PauseMenuView.PrefabName, PauseMenuView.BuildDefault);
+        // ใช้หน้าต่างที่วางไว้ใน MainHUD ก่อน ไม่มีค่อยสร้างจาก Resources/UI/PauseMenu
+        view = FindAnyObjectByType<PauseMenuView>(FindObjectsInactive.Include);
+        ownsView = view == null;
+        if (view == null)
+            view = UIPrefabs.Spawn(PauseMenuView.PrefabName, PauseMenuView.BuildDefault);
 
         // ผูกปุ่มครั้งเดียว (ปุ่มอยู่ใน Prefab แก้ตำแหน่ง/หน้าตาได้ แต่การทำงานมาจากที่นี่)
         for (int i = 0; i < view.navButtons.Length; i++)
@@ -185,15 +195,6 @@ public class PauseMenuUI : MonoBehaviour
             });
         }
 
-        if (view.qualityButton != null)
-        {
-            view.qualityButton.onClick.AddListener(() =>
-            {
-                string name = GraphicsQuality.Cycle();
-                if (view.qualityLabel != null) view.qualityLabel.text = name;
-            });
-        }
-
         BindVolume(view.mainSlider, value =>
         {
             if (AudioManager.Instance != null) AudioManager.Instance.SetMasterVolume(value);
@@ -205,8 +206,16 @@ public class PauseMenuUI : MonoBehaviour
         if (view.exitYes != null) view.exitYes.onClick.AddListener(ExitToMainMenu);
         if (view.exitNo != null) view.exitNo.onClick.AddListener(() => SelectPage(Page.Inventory));
 
-        if (view.tooltip != null)
-            view.tooltip.SetActive(false);
+        // เมนูคลิกขวา: คลิกพื้นที่ว่าง = ปิด / Use / Drop
+        if (view.contextMenu != null)
+        {
+            Button blocker = view.contextMenu.GetComponent<Button>();
+            if (blocker != null) blocker.onClick.AddListener(HideContextMenu);
+            view.contextMenu.SetActive(false);
+        }
+
+        if (view.useButton != null) view.useButton.onClick.AddListener(UseContextItem);
+        if (view.dropButton != null) view.dropButton.onClick.AddListener(DropContextItem);
 
         view.gameObject.SetActive(false);
     }
@@ -251,94 +260,186 @@ public class PauseMenuUI : MonoBehaviour
 
     private void Rebuild()
     {
-        HideTooltip();
+        HideContextMenu();
 
         switch (currentPage)
         {
             case Page.Inventory: RefreshInventory(); break;
+            case Page.XGear: RefreshXGear(); break;
             case Page.Logs: RefreshLogs(); break;
             case Page.Setting: RefreshSetting(); break;
         }
     }
 
-    private void ShowTooltip(string title, string body)
-    {
-        if (view.tooltip == null || view.tooltipText == null)
-            return;
+    // ------------------------------------------------------------ ช่อง Sprite + Description (แทนกล่องลอยแบบเดิม)
 
-        view.tooltipText.text = $"<b>{title}</b>\n<size=18>{body}</size>";
-        view.tooltip.SetActive(true);
-        view.tooltip.transform.SetAsLastSibling();
+    private void ShowInventoryDetail(string title, string body, Sprite icon, string fallbackLabel, Color labelColor)
+    {
+        if (view.inventoryDescription != null)
+            view.inventoryDescription.text = $"<b>{title}</b>\n<size=17>{body}</size>";
+
+        if (view.inventoryPreview != null)
+        {
+            view.inventoryPreview.sprite = icon;
+            view.inventoryPreview.enabled = icon != null;
+        }
+
+        if (view.inventoryPreviewLabel != null)
+        {
+            view.inventoryPreviewLabel.text = icon == null ? fallbackLabel : string.Empty;
+            view.inventoryPreviewLabel.color = labelColor;
+        }
     }
 
-    private void HideTooltip()
+    private void ClearInventoryDetail()
     {
-        if (view != null && view.tooltip != null)
-            view.tooltip.SetActive(false);
+        if (view.inventoryDescription != null)
+            view.inventoryDescription.text = $"<color=#FFFFFF88>{view.inventoryHint}</color>";
+
+        if (view.inventoryPreview != null)
+            view.inventoryPreview.enabled = false;
+
+        if (view.inventoryPreviewLabel != null)
+            view.inventoryPreviewLabel.text = string.Empty;
+    }
+
+    private void ShowXGearDetail(string title, string body)
+    {
+        if (view.xgearDescription != null)
+            view.xgearDescription.text = $"<b>{title}</b>\n<size=17>{body}</size>";
+    }
+
+    private void ClearXGearDetail()
+    {
+        if (view.xgearDescription != null)
+            view.xgearDescription.text = $"<color=#FFFFFF88>{view.xgearHint}</color>";
     }
 
     // ------------------------------------------------------------ Inventory
 
     private void RefreshInventory()
     {
-        if (view.inventoryGrid == null || view.cellTemplate == null)
+        if (view.cellTemplate == null)
             return;
 
-        UIPrefabs.ClearClones(view.inventoryGrid, view.cellTemplate, view.emptyCellTemplate != null ? view.emptyCellTemplate.transform : null);
-        int max = Mathf.Max(1, view.gridCellCount);
-        int used = 0;
+        ClearInventoryDetail();
 
-        // Keycard ที่เก็บได้ในด่านนี้ (ใช้แล้วไม่หมด บัตรระดับสูงเปิดประตูระดับต่ำกว่าได้ด้วย)
-        PlayerKeycards keycards = PlayerKeycards.Instance;
-        if (keycards != null)
+        // ---- ตาราง Inventory: Keycard, กุญแจ, อาวุธ, กระสุน, วัตถุดิบ
+        if (view.inventoryGrid != null)
         {
-            IReadOnlyList<int> levels = keycards.OwnedLevels;
-            for (int i = 0; i < levels.Count && used < max; i++)
+            ClearGrid(view.inventoryGrid);
+            int max = Mathf.Max(1, view.gridCellCount);
+            int used = 0;
+
+            // Keycard ที่เก็บได้ในด่านนี้ (ใช้แล้วไม่หมด บัตรระดับสูงเปิดประตูระดับต่ำกว่าได้ด้วย)
+            PlayerKeycards keycards = PlayerKeycards.Instance;
+            if (keycards != null)
             {
-                int level = levels[i];
-                AddCell("Lv." + level, "KEY", new Color(1f, 0.85f, 0.3f), null, "Keycard Lv." + level,
-                    $"Opens doors that need Keycard Lv.{level} or lower.\nNot used up when opening a door.\n\nKept for this mission only.");
+                IReadOnlyList<int> levels = keycards.OwnedLevels;
+                for (int i = 0; i < levels.Count && used < max; i++)
+                {
+                    int level = levels[i];
+                    Color color = new Color(1f, 0.85f, 0.3f);
+                    string body = $"Opens doors that need Keycard Lv.{level} or lower.\nNot used up when opening a door.\n\nKept for this mission only.";
+                    AddCell(view.inventoryGrid, "Lv." + level, "KEY", color, null,
+                        () => ShowInventoryDetail("Keycard Lv." + level, body, null, "KEY", color), null);
+                    used++;
+                }
+
+                // กุญแจเฉพาะประตู (DoorKeyData)
+                IReadOnlyList<DoorKeyData> doorKeys = keycards.OwnedKeys;
+                for (int i = 0; i < doorKeys.Count && used < max; i++)
+                {
+                    DoorKeyData key = doorKeys[i];
+                    if (key == null)
+                        continue;
+
+                    AddCell(view.inventoryGrid, string.Empty, "KEY", key.color, key.icon,
+                        () => ShowInventoryDetail(key.displayName, key.description + "\n\nKept for this mission only.", key.icon, "KEY", key.color), null);
+                    used++;
+                }
+            }
+
+            foreach (ItemDef def in OwnedItems())
+            {
+                if (used >= max)
+                    break;
+
+                if (IsChip(def.category) || def.category == ItemCategory.Consumable)
+                    continue;
+
+                AddItemCell(view.inventoryGrid, def, false);
                 used++;
             }
+
+            FillEmpty(view.inventoryGrid, used, max);
         }
 
-        // ไอเทมตามลำดับใน ItemCatalog: ของถาวร + ของที่เก็บในรอบนี้ (ยังไม่ถาวรจนกว่าจะจบด่าน)
+        // ---- ตาราง Consumable: Medkit, X-Gear Cell (คลิกขวา = Use / Drop)
+        if (view.consumableGrid != null)
+        {
+            ClearGrid(view.consumableGrid);
+            int max = Mathf.Max(1, view.consumableCellCount);
+            int used = 0;
+
+            foreach (ItemDef def in OwnedItems())
+            {
+                if (used >= max)
+                    break;
+
+                if (def.category != ItemCategory.Consumable)
+                    continue;
+
+                AddItemCell(view.consumableGrid, def, true);
+                used++;
+            }
+
+            FillEmpty(view.consumableGrid, used, max);
+        }
+    }
+
+    // ไอเทมที่มีอยู่ (คลังถาวร + ของที่เก็บในรอบนี้) ตามลำดับใน ItemCatalog
+    private static IEnumerable<ItemDef> OwnedItems()
+    {
         PersistentInventory persistent = PersistentInventory.Instance;
         RunInventory run = RunInventory.Instance;
 
-        // ให้ id ที่ไม่อยู่ใน Catalog (ResourceData ใหม่) ถูกลงทะเบียนก่อนวน
+        // ให้ id ที่ไม่อยู่ใน Catalog (ResourceData ใหม่ / Map Chip ของโซน) ถูกลงทะเบียนก่อนวน
         if (persistent != null)
             foreach (KeyValuePair<string, int> pair in persistent.Snapshot()) ItemCatalog.Get(pair.Key);
         if (run != null)
             foreach (KeyValuePair<string, int> pair in run.Snapshot()) ItemCatalog.Get(pair.Key);
 
         IReadOnlyList<ItemDef> all = ItemCatalog.All;
-        for (int i = 0; i < all.Count && used < max; i++)
+        for (int i = 0; i < all.Count; i++)
         {
-            ItemDef def = all[i];
-            int owned = persistent != null ? persistent.GetAmount(def.id) : 0;
-            int pending = run != null ? run.GetAmount(def.id) : 0;
-
-            if (owned + pending <= 0)
-                continue;
-
-            string amount = pending > 0 ? $"{owned}<color=#7CFF8A>+{pending}</color>" : owned.ToString();
-            string body = def.description + $"\n\nOwned: {owned}" +
-                          (pending > 0 ? $"\nThis run: +{pending} (kept when you finish the mission)" : string.Empty);
-
-            AddCell(amount, ShortLabel(def), def.color, ItemCatalog.IconOf(def.id), def.displayName, body);
-            used++;
+            int owned = persistent != null ? persistent.GetAmount(all[i].id) : 0;
+            int pending = run != null ? run.GetAmount(all[i].id) : 0;
+            if (owned + pending > 0)
+                yield return all[i];
         }
+    }
 
-        // ช่องว่างที่เหลือ ให้เห็นเป็นตาราง
-        if (view.emptyCellTemplate != null)
-        {
-            for (; used < max; used++)
-            {
-                GameObject empty = Instantiate(view.emptyCellTemplate, view.inventoryGrid, false);
-                empty.SetActive(true);
-            }
-        }
+    private static bool IsChip(ItemCategory category) =>
+        category == ItemCategory.PassiveChip || category == ItemCategory.ActiveChip || category == ItemCategory.MapData;
+
+    private void AddItemCell(RectTransform grid, ItemDef def, bool consumable)
+    {
+        PersistentInventory persistent = PersistentInventory.Instance;
+        RunInventory run = RunInventory.Instance;
+        int owned = persistent != null ? persistent.GetAmount(def.id) : 0;
+        int pending = run != null ? run.GetAmount(def.id) : 0;
+
+        string amount = pending > 0 ? $"{owned}<color=#7CFF8A>+{pending}</color>" : owned.ToString();
+        string body = def.description + $"\n\nOwned: {owned}" +
+                      (pending > 0 ? $"\nThis run: +{pending} (kept when you finish the mission)" : string.Empty) +
+                      (consumable ? "\n\n<color=#FFFFFF88>Right-click: Use / Drop</color>" : string.Empty);
+        Sprite icon = ItemCatalog.IconOf(def.id);
+        string label = ShortLabel(def);
+
+        AddCell(grid, amount, label, def.color, icon,
+            () => ShowInventoryDetail(def.displayName, body, icon, label, def.color),
+            consumable ? () => ShowContextMenu(def.id) : (System.Action)null);
     }
 
     private static string ShortLabel(ItemDef def)
@@ -346,16 +447,16 @@ public class PauseMenuUI : MonoBehaviour
         switch (def.category)
         {
             case ItemCategory.Ammo: return def.displayName.Replace(" Ammo", string.Empty);
-            case ItemCategory.PassiveChip: return "P-Chip";
-            case ItemCategory.ActiveChip: return "A-Chip";
-            case ItemCategory.MapData: return "Map";
+            case ItemCategory.PassiveChip: return def.displayName.Replace("Passive Chip : ", string.Empty);
+            case ItemCategory.ActiveChip: return def.displayName.Replace("Active Chip : ", string.Empty);
+            case ItemCategory.MapData: return def.displayName.Replace("Map Data : ", string.Empty);
             default: return def.displayName;
         }
     }
 
-    private void AddCell(string amount, string label, Color color, Sprite icon, string tooltipTitle, string tooltipBody)
+    private void AddCell(RectTransform grid, string amount, string label, Color color, Sprite icon, System.Action onEnter, System.Action onRightClick)
     {
-        InventoryCellView cell = UIPrefabs.Clone(view.cellTemplate, view.inventoryGrid);
+        InventoryCellView cell = UIPrefabs.Clone(view.cellTemplate, grid);
 
         if (cell.icon != null)
         {
@@ -374,8 +475,230 @@ public class PauseMenuUI : MonoBehaviour
             cell.amount.text = amount;
 
         UIPointerRelay relay = UIPrefabs.Relay(cell);
-        relay.onEnter = () => ShowTooltip(tooltipTitle, tooltipBody);
-        relay.onExit = HideTooltip;
+        relay.onEnter = onEnter;
+        relay.onRightClick = onRightClick;
+    }
+
+    // ลบช่องที่ Clone ไว้ในตาราง (เก็บ Template ที่ปิดไว้)
+    private void ClearGrid(RectTransform grid)
+    {
+        UIPrefabs.ClearClones(grid, view.cellTemplate, view.emptyCellTemplate != null ? view.emptyCellTemplate.transform : null);
+    }
+
+    // ช่องว่างที่เหลือ ให้เห็นเป็นตาราง
+    private void FillEmpty(RectTransform grid, int used, int max)
+    {
+        if (view.emptyCellTemplate == null)
+            return;
+
+        for (; used < max; used++)
+        {
+            GameObject empty = Instantiate(view.emptyCellTemplate, grid, false);
+            empty.SetActive(true);
+        }
+    }
+
+    // ------------------------------------------------------------ คลิกขวา: Use / Drop (ของใช้)
+
+    private void ShowContextMenu(string itemId)
+    {
+        if (view.contextMenu == null || view.contextPanel == null)
+            return;
+
+        contextItemId = itemId;
+        view.contextMenu.SetActive(true);
+        view.contextMenu.transform.SetAsLastSibling();
+
+        // วางเมนูที่ตำแหน่งเมาส์ (แปลงพิกัดจอเป็นพิกัดใน Canvas)
+        RectTransform area = (RectTransform)view.contextMenu.transform;
+        Vector2 mouse = Mouse.current != null ? Mouse.current.position.ReadValue() : (Vector2)Input.mousePosition;
+        Canvas canvas = area.GetComponentInParent<Canvas>();
+        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(area, mouse, cam, out Vector2 local))
+            view.contextPanel.anchoredPosition = local - area.rect.min;
+
+        SfxLibrary.PlayUI("ui_click");
+    }
+
+    private void HideContextMenu()
+    {
+        contextItemId = null;
+        if (view != null && view.contextMenu != null)
+            view.contextMenu.SetActive(false);
+    }
+
+    private void UseContextItem()
+    {
+        string itemId = contextItemId;
+        HideContextMenu();
+
+        if (string.IsNullOrEmpty(itemId) || pickup == null)
+            return;
+
+        ItemDef def = ItemCatalog.Get(itemId);
+        if (pickup.UseConsumable(itemId, out string reason))
+        {
+            ShowInventoryDetail(def.displayName, "Used.", ItemCatalog.IconOf(itemId), ShortLabel(def), def.color);
+            RefreshInventory();
+        }
+        else
+        {
+            SfxLibrary.PlayUI("ui_error");
+            ShowInventoryDetail(def.displayName, $"<color=#FF7777>{reason}</color>", ItemCatalog.IconOf(itemId), ShortLabel(def), def.color);
+        }
+    }
+
+    private void DropContextItem()
+    {
+        string itemId = contextItemId;
+        HideContextMenu();
+
+        PersistentInventory inventory = PersistentInventory.Instance;
+        if (string.IsNullOrEmpty(itemId) || inventory == null || player == null || !inventory.TrySpend(itemId, 1))
+            return;
+
+        SpawnDrop(itemId, player.transform);
+        SfxLibrary.PlayUI("ui_click");
+        RefreshInventory();
+    }
+
+    // วางของ 1 ชิ้นไว้หน้าผู้เล่น: ใช้ Drop Prefab ใน ItemData ของไอเทม ถ้าไม่มีสร้างกล่องเก็บได้ทั่วไปให้
+    private static void SpawnDrop(string itemId, Transform owner)
+    {
+        CharacterController body = owner.GetComponent<CharacterController>();
+        float feetY = body != null ? body.bounds.min.y : owner.position.y;
+        Vector3 position = owner.position + owner.forward * 0.9f;
+        position.y = feetY + 0.2f;
+
+        GameObject prefab = null;
+        foreach (ItemData data in Resources.LoadAll<ItemData>(CommandBook.ItemsFolder))
+        {
+            if (data != null && data.hasCommand && data.command != null && data.command.itemId == itemId)
+            {
+                prefab = data.dropPrefab;
+                break;
+            }
+        }
+
+        GameObject drop;
+        if (prefab != null)
+        {
+            drop = Instantiate(prefab, position, Quaternion.identity);
+        }
+        else
+        {
+            drop = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            drop.name = "Drop_" + itemId;
+            drop.transform.SetPositionAndRotation(position, Quaternion.identity);
+            drop.transform.localScale = Vector3.one * 0.3f;
+
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            if (lit != null)
+            {
+                Material material = new Material(lit);
+                material.SetColor("_BaseColor", ItemCatalog.Get(itemId).color);
+                drop.GetComponent<Renderer>().sharedMaterial = material;
+            }
+        }
+
+        // ให้ PickupDetector (กด E) เห็นของที่ทิ้ง: Layer "Items" + ตัวเก็บของตาม id
+        int itemsLayer = LayerMask.NameToLayer("Items");
+        if (itemsLayer >= 0)
+            drop.layer = itemsLayer;
+
+        InventoryPickup pickupComponent = drop.GetComponent<InventoryPickup>();
+        if (pickupComponent == null)
+            pickupComponent = drop.AddComponent<InventoryPickup>();
+        pickupComponent.itemId = itemId;
+        pickupComponent.amount = 1;
+    }
+
+    // ------------------------------------------------------------ X-Gear
+
+    private void RefreshXGear()
+    {
+        if (view.cellTemplate == null)
+            return;
+
+        ClearXGearDetail();
+        FillChipGrid(view.activeGrid, ItemCategory.ActiveChip);
+        FillChipGrid(view.passiveGrid, ItemCategory.PassiveChip);
+        FillChipGrid(view.mapGrid, ItemCategory.MapData);
+    }
+
+    private void FillChipGrid(RectTransform grid, ItemCategory category)
+    {
+        if (grid == null)
+            return;
+
+        ClearGrid(grid);
+        int max = Mathf.Max(1, view.chipCellCount);
+        int used = 0;
+
+        PersistentInventory inventory = PersistentInventory.Instance;
+        XGearSystem gear = player != null ? player.GetComponent<XGearSystem>() : null;
+
+        foreach (ItemDef def in OwnedItems())
+        {
+            if (used >= max)
+                break;
+
+            if (def.category != category)
+                continue;
+
+            int count = inventory != null ? inventory.GetAmount(def.id) : 0;
+            string body = def.description + $"\n\nOwned: {count}";
+
+            if (category == ItemCategory.ActiveChip)
+            {
+                CommandRecipe recipe = FindChipRecipe(def.id);
+                body += recipe != null ? "\nCommand: " + ArrowText(recipe) : string.Empty;
+                if (gear != null && gear.LoadedChip == def.id)
+                    body += "\n<color=#7CC8FF>In X-Gear now</color>";
+            }
+            else if (category == ItemCategory.MapData && MapArea.Current != null && MapArea.Current.mapChipId == def.id)
+            {
+                body += "\n<color=#7CC8FF>You are in this area</color>";
+            }
+
+            Sprite icon = ItemCatalog.IconOf(def.id);
+            string label = ShortLabel(def);
+            AddCell(grid, count > 1 ? "x" + count : string.Empty, label, def.color, icon,
+                () => ShowXGearDetail(def.displayName, body), null);
+            used++;
+        }
+
+        FillEmpty(grid, used, max);
+    }
+
+    private static CommandRecipe FindChipRecipe(string chipId)
+    {
+        IReadOnlyList<CommandRecipe> all = CommandBook.All;
+        for (int i = 0; i < all.Count; i++)
+            if (all[i] != null && all[i].kind == CommandKind.XGearChip && all[i].itemId == chipId)
+                return all[i];
+        return null;
+    }
+
+    private static string ArrowText(CommandRecipe recipe)
+    {
+        if (recipe.sequence == null)
+            return "-";
+
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        for (int i = 0; i < recipe.sequence.Length; i++)
+        {
+            if (i > 0) builder.Append(' ');
+            switch (recipe.sequence[i])
+            {
+                case CommandArrow.Up: builder.Append('W'); break;
+                case CommandArrow.Down: builder.Append('S'); break;
+                case CommandArrow.Left: builder.Append('A'); break;
+                default: builder.Append('D'); break;
+            }
+        }
+
+        return builder.ToString();
     }
 
     // ------------------------------------------------------------ Logs (แท็บ Log | Command)
@@ -565,9 +888,6 @@ public class PauseMenuUI : MonoBehaviour
     {
         if (view.fullscreenMark != null)
             view.fullscreenMark.text = Screen.fullScreen ? "X" : string.Empty;
-
-        if (view.qualityLabel != null)
-            view.qualityLabel.text = GraphicsQuality.CurrentName;
 
         AudioManager audio = AudioManager.Instance;
         bool hasAudio = audio != null;

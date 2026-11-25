@@ -33,7 +33,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0.7071068, z: 0, w: 0.7071068}
   m_LocalPosition: {x: -3.8222911, y: 0.108, z: 4.9000735}
-  m_LocalScale: {x: 3, y: 3, z: 3}
+  m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 4701837601002686623}
@@ -219,6 +219,7 @@ MonoBehaviour:
   slotType: 0
   headshotMultiplier: 0
   forceScopeOverlay: 0
+  aimStyle: 0
   hitMask:
     serializedVersion: 2
     m_Bits: 32755
@@ -381,7 +382,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc3eb417998b444f957777de8ef24cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WeaponInfo
-  itemData: {fileID: 0}
+  itemData: {fileID: 11400000, guid: ed2b5786ce49bbe4c929f66a2cdd3e33, type: 2}
 --- !u!1 &4815573250013963836
 GameObject:
   m_ObjectHideFlags: 0

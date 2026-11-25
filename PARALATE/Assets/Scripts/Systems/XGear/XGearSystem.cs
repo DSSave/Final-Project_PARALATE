@@ -1,15 +1,14 @@
+using System;
 using UnityEngine;
-using UnityEngine.AI;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// X-Gear: แขนกลที่ติดตัวผู้เล่นตั้งแต่เริ่มเกม มี 3 ช่อง (ตั้งค่าที่ Upgrade Corner ใน Base, เก็บใน XGearLoadout)
-///   Passive : ใส่แล้วได้ผลอัตโนมัติตลอด (FleetFoot = ย่อเดินเร็วขึ้น 5%)
-///   Active  : เปลี่ยนมาถือ X-Gear แล้วคลิกซ้ายเพื่อใช้ ใช้ได้ maxCharges ครั้งต่อด่าน (ขีดสีฟ้ามุมซ้ายบน)
-///             เก็บ X-Gear Cell ในด่านเพื่อเติมทีละหน่วย (ไม่เกิน maxCharges)
-///   Map     : ใส่ Map Data ของด่านไหน เข้าด่านนั้นจะมี Minimap ทั้งแผนที่ + ศัตรู
+/// X-Gear (Universal): แขนกลที่ติดตัวผู้เล่น ชิปทุกชิ้นอยู่ในคลัง (PersistentInventory) ไม่ต้องติดตั้งทีละช่องแล้ว
+///   Passive Chip : ได้ผลอัตโนมัติ และซ้อนตามจำนวนที่เก็บได้ (FleetFoot 2 ชิ้น = ย่อเดินเร็วขึ้น 10%)
+///   Active Chip  : พิมพ์สูตร CommandLine ของชิป → ชิปเข้าช่อง X-Gear และถือ X-Gear ขึ้นมา → คลิกซ้ายเพื่อใช้
+///                  ใช้ครั้งละ 1 Charge (เริ่มด่านเต็ม maxCharges / X-Gear Cell เติมทีละหน่วย)
+///   Map Chip     : ดู MapArea (เข้าโซนที่มีชิปของโซนนั้น = Minimap ขึ้นเอง)
 /// คอมโพเนนต์นี้ถูกเพิ่มให้ผู้เล่นอัตโนมัติ (PlayerSystems) ไม่ต้องแก้ Prefab
 /// </summary>
 [DisallowMultipleComponent]
@@ -23,18 +22,25 @@ public class XGearSystem : MonoBehaviour
     public float invisibleDuration = 5f;
 
     [Header("Passive Chip : FleetFoot")]
-    public float fleetFootCrouchMultiplier = 1.05f;
+    [Tooltip("ความเร็วตอนย่อที่เพิ่มต่อชิป 1 ชิ้น (0.05 = +5%) ซ้อนตามจำนวนชิปในคลัง")]
+    public float fleetFootBonusPerChip = 0.05f;
 
     [Header("HUD")]
     public Color chargeColor = new Color(0.25f, 0.7f, 1f, 1f);
+
+    /// <summary>Active Chip ในช่อง X-Gear เปลี่ยน / Charge เปลี่ยน (WeaponHUD ใช้รีเฟรช)</summary>
+    public static event Action OnChanged;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => OnChanged = null;
 
     private TopDownPlayerController controller;
     private PickupSystem pickup;
     private WeaponWheelUI wheel;
     private InputAction fireAction;
 
+    private string loadedChip = string.Empty;
     private int charges;
-    private bool usedThisMission;
     private float invisibleUntil;
     private bool isInvisible;
 
@@ -46,11 +52,15 @@ public class XGearSystem : MonoBehaviour
     public int MaxCharges => Mathf.Max(1, maxCharges);
     public bool IsInvisible => isInvisible;
 
+    /// <summary>Active Chip ที่อยู่ในช่อง X-Gear ตอนนี้ (ว่าง = ยังไม่ได้เรียกชิป)</summary>
+    public string LoadedChip => loadedChip;
+
     private void Awake()
     {
         controller = GetComponent<TopDownPlayerController>();
         pickup = GetComponent<PickupSystem>();
         wheel = GetComponent<WeaponWheelUI>();
+        charges = MaxCharges; // เริ่มด่านเต็ม (คอมโพเนนต์อยู่บนผู้เล่นของแต่ละ Scene จึงรีเซ็ตเองทุกด่าน)
 
         PlayerInput input = GetComponent<PlayerInput>();
         if (input != null && input.actions != null)
@@ -59,39 +69,69 @@ public class XGearSystem : MonoBehaviour
 
     private void OnEnable()
     {
-        XGearLoadout.OnChanged += ApplyLoadout;
+        PersistentInventory.OnChanged += ApplyPassives;
     }
 
     private void Start()
     {
+        MigrateOldLoadout();
         FindOrBuildChargeBar();
-        ApplyLoadout();
+        ApplyPassives();
+        RefreshChargeBar();
+        MapArea.RefreshMinimap(); // Scene ที่ไม่มีโซน Minimap เลย = ซ่อน Minimap
     }
 
     private void OnDisable()
     {
-        XGearLoadout.OnChanged -= ApplyLoadout;
+        PersistentInventory.OnChanged -= ApplyPassives;
         SetInvisible(false);
     }
 
-    // เรียกตอนเริ่มด่าน และทุกครั้งที่เปลี่ยนของในช่อง (ที่ Base)
-    private void ApplyLoadout()
+    // ------------------------------------------------------------ Passive: ซ้อนตามจำนวนชิปในคลัง
+
+    private void ApplyPassives()
     {
-        // Passive
+        PersistentInventory inventory = PersistentInventory.Instance;
+        int fleetFoot = inventory != null ? inventory.GetAmount(ItemCatalog.ChipFleetFoot) : 0;
+
         if (controller != null)
-            controller.CrouchSpeedMultiplier = XGearLoadout.PassiveId == ItemCatalog.ChipFleetFoot ? fleetFootCrouchMultiplier : 1f;
+            controller.CrouchSpeedMultiplier = 1f + fleetFoot * fleetFootBonusPerChip;
 
-        // Active: เริ่มด่านมาเต็ม maxCharges (คอมโพเนนต์นี้อยู่บนผู้เล่นของ Scene จึงรีเซ็ตเองเมื่อโหลดด่านใหม่)
-        bool hasChip = !string.IsNullOrEmpty(XGearLoadout.ActiveId);
-        if (!hasChip)
-            charges = 0;
-        else if (!usedThisMission)
-            charges = MaxCharges;
-        else
-            charges = Mathf.Min(charges, MaxCharges);
+        // ชิปที่เรียกไว้ถูกทิ้ง/หายจากคลัง: ล้างช่อง
+        if (!string.IsNullOrEmpty(loadedChip) && (inventory == null || !inventory.Has(loadedChip)))
+            SetLoadedChip(string.Empty);
+    }
 
-        ApplyMap();
-        RefreshChargeBar();
+    // ------------------------------------------------------------ Active: เรียกด้วย Command แล้วคลิกซ้าย
+
+    /// <summary>ใส่ Active Chip เข้าช่อง X-Gear (CommandLine เรียก) ต้องมีชิปในคลัง</summary>
+    public bool LoadChip(string chipId, out string reason)
+    {
+        reason = null;
+        ItemDef def = ItemCatalog.Get(chipId);
+
+        if (def == null || def.category != ItemCategory.ActiveChip)
+        {
+            reason = "Not an Active Chip";
+            return false;
+        }
+
+        if (PersistentInventory.Instance == null || !PersistentInventory.Instance.Has(chipId))
+        {
+            reason = def.displayName + " not owned";
+            return false;
+        }
+
+        SetLoadedChip(chipId);
+        SfxLibrary.PlayUI("chip_insert");
+        return true;
+    }
+
+    /// <summary>ตั้งชิปในช่องตรงๆ (ใช้ตอนโหลดเซฟ) ไม่เช็กคลัง</summary>
+    public void SetLoadedChip(string chipId)
+    {
+        loadedChip = chipId ?? string.Empty;
+        OnChanged?.Invoke();
     }
 
     private void Update()
@@ -119,7 +159,7 @@ public class XGearSystem : MonoBehaviour
         if (fireAction == null || !fireAction.WasPressedThisFrame())
             return;
 
-        if (Time.timeScale <= 0f || (wheel != null && wheel.IsOpen) || (controller != null && controller.IsMovementLocked))
+        if (Time.timeScale <= 0f || (wheel != null && wheel.IsOpen) || (controller != null && controller.IsMovementLocked) || CommandLineUI.IsTyping)
             return;
 
         TryActivate();
@@ -127,12 +167,10 @@ public class XGearSystem : MonoBehaviour
 
     public bool TryActivate()
     {
-        string activeId = XGearLoadout.ActiveId;
-
-        if (string.IsNullOrEmpty(activeId))
+        if (string.IsNullOrEmpty(loadedChip))
         {
             SfxLibrary.Play("empty_click");
-            HudToast.Show("No Active Chip installed");
+            HudToast.Show("No Active Chip — call one with its Command (Q)");
             return false;
         }
 
@@ -144,9 +182,8 @@ public class XGearSystem : MonoBehaviour
         }
 
         charges--;
-        usedThisMission = true;
 
-        if (activeId == ItemCatalog.ChipInvisible)
+        if (loadedChip == ItemCatalog.ChipInvisible)
         {
             invisibleUntil = Time.time + invisibleDuration;
             SetInvisible(true);
@@ -154,27 +191,22 @@ public class XGearSystem : MonoBehaviour
 
         SfxLibrary.Play("xgear_activate");
         RefreshChargeBar();
+        OnChanged?.Invoke();
         return true;
     }
 
     /// <summary>ตั้งจำนวน Charge ตรงๆ (ใช้ตอนโหลดเซฟ)</summary>
     public void SetCharges(int value)
     {
-        usedThisMission = true;
-        charges = string.IsNullOrEmpty(XGearLoadout.ActiveId) ? 0 : Mathf.Clamp(value, 0, MaxCharges);
+        charges = Mathf.Clamp(value, 0, MaxCharges);
         RefreshChargeBar();
+        OnChanged?.Invoke();
     }
 
-    /// <summary>เติม X-Gear (X-Gear Cell) คืน false ถ้าไม่มี Active Chip หรือเต็มแล้ว (ไอเทมจะไม่ถูกใช้)</summary>
+    /// <summary>เติม Charge (X-Gear Cell) คืน false ถ้าเต็มแล้ว (ไอเทมจะไม่ถูกใช้)</summary>
     public bool AddCharges(int amount, out string reason)
     {
         reason = null;
-
-        if (string.IsNullOrEmpty(XGearLoadout.ActiveId))
-        {
-            reason = "No Active Chip installed";
-            return false;
-        }
 
         if (charges >= MaxCharges)
         {
@@ -184,6 +216,7 @@ public class XGearSystem : MonoBehaviour
 
         charges = Mathf.Min(charges + Mathf.Max(1, amount), MaxCharges);
         RefreshChargeBar();
+        OnChanged?.Invoke();
         return true;
     }
 
@@ -195,7 +228,7 @@ public class XGearSystem : MonoBehaviour
         isInvisible = value;
         PlayerStealth.SetInvisible(value);
 
-        // บอกผู้เล่นด้วยภาพ: ตัวละครไม่ทอดเงาและโปร่งแสงขึ้นระหว่างล่องหน
+        // บอกผู้เล่นด้วยภาพ: ตัวละครไม่ทอดเงาระหว่างล่องหน
         if (bodyRenderers == null)
             bodyRenderers = GetComponentsInChildren<Renderer>(true);
 
@@ -208,6 +241,37 @@ public class XGearSystem : MonoBehaviour
                 ? UnityEngine.Rendering.ShadowCastingMode.Off
                 : UnityEngine.Rendering.ShadowCastingMode.On;
         }
+    }
+
+    // ------------------------------------------------------------ ระบบติดตั้งชิปแบบเก่า (3 ช่อง) → คืนชิปเข้าคลัง
+
+    private static readonly string[] OldLoadoutKeys = { "XGear_Passive", "XGear_Active", "XGear_Map" };
+
+    // เซฟเก่าที่ติดตั้งชิปไว้: ตอนติดตั้งชิปถูกหักออกจากคลัง จึงต้องคืนกลับ (ทำครั้งเดียว แล้วลบค่าเดิมทิ้ง)
+    private static void MigrateOldLoadout()
+    {
+        PersistentInventory inventory = PersistentInventory.Instance;
+        if (inventory == null)
+            return;
+
+        for (int i = 0; i < OldLoadoutKeys.Length; i++)
+        {
+            string id = PlayerPrefs.GetString(OldLoadoutKeys[i], string.Empty);
+            if (!string.IsNullOrEmpty(id))
+            {
+                inventory.Add(id, 1);
+                CommandBook.LearnFromItem(id);
+            }
+
+            PlayerPrefs.DeleteKey(OldLoadoutKeys[i]);
+        }
+    }
+
+    /// <summary>ลบค่าการติดตั้งแบบเก่า (เมนูรีเซ็ตเซฟใช้)</summary>
+    public static void ResetOldLoadout()
+    {
+        for (int i = 0; i < OldLoadoutKeys.Length; i++)
+            PlayerPrefs.DeleteKey(OldLoadoutKeys[i]);
     }
 
     // ------------------------------------------------------------ HUD: ขีดสีฟ้ามุมซ้ายบน
@@ -249,12 +313,8 @@ public class XGearSystem : MonoBehaviour
         if (chargeRoot == null || chargeFill == null)
             return;
 
-        bool hasChip = !string.IsNullOrEmpty(XGearLoadout.ActiveId);
-        if (chargeRoot.activeSelf != hasChip)
-            chargeRoot.SetActive(hasChip);
-
-        if (!hasChip)
-            return;
+        if (!chargeRoot.activeSelf)
+            chargeRoot.SetActive(true);
 
         // ความยาวขีด = จำนวนครั้งที่เหลือ / สูงสุด, ระหว่างล่องหนครั้งที่กำลังใช้หดตามเวลาที่เหลือ
         float running = isInvisible ? Mathf.Clamp01((invisibleUntil - Time.time) / invisibleDuration) : 0f;
@@ -262,60 +322,6 @@ public class XGearSystem : MonoBehaviour
         chargeFill.color = chargeColor;
         chargeFill.enabled = fraction > 0f;
         chargeFill.transform.localScale = new Vector3(fraction, 1f, 1f);
-    }
-
-    // ------------------------------------------------------------ Map Data → Minimap ทั้งแผนที่
-
-    private void ApplyMap()
-    {
-        MinimapManager manager = FindAnyObjectByType<MinimapManager>(FindObjectsInactive.Include);
-        if (manager == null)
-            return; // Scene นี้ไม่มี Minimap
-
-        ItemDef map = ItemCatalog.Get(XGearLoadout.MapId);
-        bool hasMap = map != null && map.category == ItemCategory.MapData &&
-                      map.sceneName == SceneManager.GetActiveScene().name;
-
-        // กลุ่ม "Map" ใน HUD (พ่อของ MinimapManager) เปิดเฉพาะเมื่อใส่ Map Data ของด่านนี้
-        Transform mapRoot = manager.transform.parent;
-        if (mapRoot != null && mapRoot.GetComponent<Canvas>() == null)
-            mapRoot.gameObject.SetActive(hasMap);
-
-        MinimapCameraFollow follow = FindAnyObjectByType<MinimapCameraFollow>(FindObjectsInactive.Include);
-        Camera mapCamera = follow != null ? follow.GetComponent<Camera>() : null;
-        if (mapCamera == null)
-            return;
-
-        // ประหยัดเฟรมเรต: ไม่ได้โชว์แผนที่ = ปิดกล้อง Minimap สนิท / โชว์อยู่ = เรนเดอร์ 10 ครั้งต่อวินาทีพอ
-        MinimapRenderThrottle throttle = MinimapRenderThrottle.EnsureOn(mapCamera);
-        throttle.SetVisible(hasMap);
-
-        if (!hasMap)
-            return;
-
-        // ขอบเขตของด่าน = พื้นที่เดินได้ทั้งหมดของ NavMesh แล้วตั้งกล้อง Minimap ให้เห็นทั้งหมดจากด้านบน
-        NavMeshTriangulation triangulation = NavMesh.CalculateTriangulation();
-        if (triangulation.vertices == null || triangulation.vertices.Length == 0)
-            return; // ไม่มี NavMesh: ใช้ Minimap แบบตามผู้เล่นตามเดิม
-
-        Bounds bounds = new Bounds(triangulation.vertices[0], Vector3.zero);
-        for (int i = 1; i < triangulation.vertices.Length; i++)
-            bounds.Encapsulate(triangulation.vertices[i]);
-
-        follow.enabled = false; // หยุดตามผู้เล่น
-
-        float aspect = mapCamera.targetTexture != null
-            ? (float)mapCamera.targetTexture.width / mapCamera.targetTexture.height
-            : mapCamera.aspect;
-
-        float height = Mathf.Max(follow.height + 5f, bounds.max.y + 15f);
-
-        mapCamera.orthographic = true;
-        mapCamera.orthographicSize = Mathf.Max(bounds.extents.z, bounds.extents.x / Mathf.Max(0.01f, aspect)) * 1.1f;
-        mapCamera.farClipPlane = Mathf.Max(mapCamera.farClipPlane, height - bounds.min.y + 10f);
-        mapCamera.transform.SetPositionAndRotation(
-            new Vector3(bounds.center.x, height, bounds.center.z),
-            Quaternion.Euler(90f, 0f, 0f));
     }
 }
 

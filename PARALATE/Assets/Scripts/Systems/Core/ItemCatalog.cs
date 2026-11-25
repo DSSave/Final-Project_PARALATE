@@ -32,8 +32,8 @@ public enum HeldSlot
     Unarmed = 0,
     Primary = 1,   // ไม่ใช้แล้ว (อาวุธเรียกผ่านช่อง Command) เก็บค่าไว้ไม่ให้ข้อมูลเดิมเพี้ยน
     Secondary = 2, // ไม่ใช้แล้ว
-    XGear = 3,
-    Command = 4,   // ไอเทม/อาวุธที่เรียกด้วยสูตร CommandLine
+    XGear = 3,     // แขนกล: Active Chip ที่เรียกด้วย Command อยู่ช่องนี้ คลิกซ้ายใช้
+    Weapon = 4,    // ปืนที่ถือ (ชิ้นแรกที่เก็บได้ / เปลี่ยนด้วย Command) — เดิมชื่อ Command
     Knife = 5      // มีดติดตัวตั้งแต่เริ่ม คลิกซ้ายฟัน
 }
 
@@ -87,22 +87,24 @@ public static class ItemCatalog
         Add(AmmoPistol, "USP Ammo", ".45 rounds for the USP.", ItemCategory.Ammo, new Color(0.95f, 0.8f, 0.3f));
         Add(AmmoSniper, "Sniper Ammo", "High-caliber rounds for the sniper rifle.", ItemCategory.Ammo, new Color(0.95f, 0.8f, 0.3f));
 
-        Add(ChipFleetFoot, "Passive Chip : FleetFoot", "Passive. Crouch movement speed +5%.", ItemCategory.PassiveChip, new Color(0.4f, 0.9f, 0.5f));
+        // ชิป X-Gear: เก็บแล้วเข้าคลังทันที (หน้า Esc > X-Gear)
+        //   Passive = ได้ผลอัตโนมัติ ซ้อนตามจำนวนที่มี / Active = เรียกด้วย Command เข้าช่อง X-Gear แล้วคลิกซ้าย
+        Add(ChipFleetFoot, "Passive Chip : FleetFoot", "Passive. Crouch movement speed +5% per chip (stacks).", ItemCategory.PassiveChip, new Color(0.4f, 0.9f, 0.5f));
         Add(ChipInvisible, "Active Chip : Invisible",
-            "Active. Become invisible for 5 seconds. Enemies cannot detect you by sight.\nSwitch to X-Gear and press Left Click. Uses per mission = X-Gear charges.",
+            "Active. Become invisible for 5 seconds. Enemies cannot detect you by sight.\nCall it with its Command, then Left Click with X-Gear. Each use costs 1 X-Gear charge.",
             ItemCategory.ActiveChip, new Color(0.35f, 0.7f, 1f));
 
-        ItemDef map = Add(MapHideOut, "Map Data : HideOut", "Shows the full HideOut minimap, including enemies.", ItemCategory.MapData, new Color(0.9f, 0.5f, 0.9f));
-        map.sceneName = "HideOut";
+        // Map Chip: เข้าโซน (MapArea) ที่มีชิปของโซนนั้น = Minimap ขึ้นเอง
+        Add(MapHideOut, "Map Data : HideOut", "Shows the HideOut minimap, including enemies, while you are inside it.", ItemCategory.MapData, new Color(0.9f, 0.5f, 0.9f));
 
-        // ของใช้: เก็บเข้าคลัง แล้วเรียกด้วย Command → คลิกซ้ายเพื่อใช้ (ปริมาณที่ฟื้นตั้งใน Resources/CommandBook)
-        Add(Medkit, "Medkit", "Restores health.\nCall it with its Command, then Left Click to use.", ItemCategory.Consumable, new Color(1f, 0.35f, 0.35f));
-        Add(XGearCell, "X-Gear Cell", "Restores 1 X-Gear charge (up to the maximum).\nCall it with its Command, then Left Click to use.", ItemCategory.Consumable, new Color(0.25f, 0.7f, 1f));
+        // ของใช้: ใช้ทันทีด้วย Command หรือหน้า Esc > Inventory (คลิกขวา > Use) ปริมาณที่ฟื้นตั้งใน ItemData ของไอเทม
+        Add(Medkit, "Medkit", "Restores health.\nUse it with its Command, or right-click it in the Inventory.", ItemCategory.Consumable, new Color(1f, 0.35f, 0.35f));
+        Add(XGearCell, "X-Gear Cell", "Restores 1 X-Gear charge (up to the maximum).\nUse it with its Command, or right-click it in the Inventory.", ItemCategory.Consumable, new Color(0.25f, 0.7f, 1f));
 
-        // อาวุธ: เก็บครั้งแรก = เป็นเจ้าของถาวร + ปลดล็อกสูตร Command / เรียกมาได้ 1 แม็ก ยิงหมดติด Cooldown
-        Add(WeaponUsp, "USP", "Pistol. Call it with its Command: one magazine, then a cooldown.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
-        Add(WeaponSniper, "Sniper", "Sniper rifle. Call it with its Command: one magazine, then a cooldown.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
-        Add(WeaponAk, "AK47", "Assault rifle. Call it with its Command: one magazine, then a cooldown.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
+        // อาวุธ: เก็บครั้งแรก = เป็นเจ้าของถาวร + ปลดล็อกสูตร Command (ชิ้นแรกที่เก็บเข้าช่อง Weapon ทันที)
+        Add(WeaponUsp, "USP", "Pistol. Swap it into the Weapon slot with its Command. Reloads from your USP ammo.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
+        Add(WeaponSniper, "Sniper", "Sniper rifle. Swap it into the Weapon slot with its Command. Reloads from your sniper ammo.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
+        Add(WeaponAk, "AK47", "Assault rifle. Swap it into the Weapon slot with its Command. Reloads from your AK ammo.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
         Add(WeaponKnife, "Knife", "Makes stealth kills from a strangle faster.", ItemCategory.Weapon, new Color(1f, 0.6f, 0.3f));
     }
 
@@ -133,12 +135,36 @@ public static class ItemCatalog
 
         if (!defs.TryGetValue(id, out ItemDef def))
         {
-            def = new ItemDef { id = id, displayName = id, description = string.Empty, category = ItemCategory.Resource };
+            // Map Chip ของโซนใหม่ (id ขึ้นต้น map_) ไม่ต้องเพิ่มโค้ด: MapArea ลงทะเบียนชื่อให้ตอนโหลด Scene
+            bool isMap = id.StartsWith(MapPrefix, System.StringComparison.Ordinal);
+            def = new ItemDef
+            {
+                id = id,
+                displayName = isMap ? "Map Data : " + id.Substring(MapPrefix.Length) : id,
+                description = isMap ? "Shows this area's minimap when you are inside it." : string.Empty,
+                category = isMap ? ItemCategory.MapData : ItemCategory.Resource,
+                color = isMap ? new Color(0.9f, 0.5f, 0.9f) : Color.white
+            };
             defs[id] = def;
             ordered.Add(def);
         }
 
         return def;
+    }
+
+    /// <summary>คำนำหน้า id ของ Map Chip (map_metro, map_warehouse ...)</summary>
+    public const string MapPrefix = "map_";
+
+    /// <summary>ตั้งชื่อ/คำอธิบายของ Map Chip ให้ตรงกับโซน (MapArea เรียกตอนเริ่ม Scene)</summary>
+    public static void RegisterMap(string id, string displayName, string description)
+    {
+        if (string.IsNullOrEmpty(id))
+            return;
+
+        ItemDef def = Get(id);
+        def.category = ItemCategory.MapData;
+        if (!string.IsNullOrEmpty(displayName)) def.displayName = displayName;
+        if (!string.IsNullOrEmpty(description)) def.description = description;
     }
 
     public static string NameOf(string id)

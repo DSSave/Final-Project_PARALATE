@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7b38e213e270042a9e4e7f559e81c2, type: 3}
+  m_Name: Chip_Invisible
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  pickupSound: {fileID: 0}
+  itemName: Invisible
+  icon: {fileID: 0}
+  promptText: '[ E ] to pick up'
+  dropPrefab: {fileID: 0}
+  hasCommand: 1
+  command:
+    id: chip_invisible
+    displayName: Invisible
+    description: Loads the Invisible chip into X-Gear. Left Click with X-Gear to
+      use (1 charge).
+    kind: 3
+    sequence: 0100000000000000030000000200000001000000
+    itemId: chip_invisible
+    weaponPrefab: {fileID: 0}
+    effectAmount: 1
+    knownFromStart: 0

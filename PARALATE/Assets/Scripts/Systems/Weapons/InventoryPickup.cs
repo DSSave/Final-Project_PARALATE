@@ -4,9 +4,9 @@ using UnityEngine;
 /// ของเก็บได้ทั่วไปตาม id ใน ItemCatalog: กล่องกระสุน, ชิป X-Gear, Map Data
 /// (ใช้ระบบเดียวกับ ItemPickup/ResourcePickup: ต้องมี Collider และอยู่ใน Layer "Items")
 /// - กระสุน: เข้ากระเป๋าทันที ใช้รีโหลดได้เลย
-/// - ของใช้ (Medkit, X-Gear Cell): เข้าคลังทันที + ปลดล็อกสูตร Command ครั้งแรก (Amount = จำนวนชิ้น)
-///   เรียกใช้ด้วย CommandLine (Q) แล้วคลิกซ้าย
-/// - อย่างอื่น: เข้า RunInventory ก่อน จบด่านสำเร็จถึงเป็นของถาวร (กติกาเดียวกับ Scrap/Metal)
+/// - ของใช้ (Medkit, X-Gear Cell) และชิป X-Gear (Passive / Active / Map): เข้าคลังทันที + ปลดล็อกสูตร Command ครั้งแรก
+///   (Amount = จำนวนชิ้น) ของใช้ใช้ด้วย Command หรือหน้า Inventory / Active Chip เรียกด้วย Command แล้วคลิกซ้าย
+/// - อย่างอื่น (Scrap, Metal): เข้า RunInventory ก่อน จบด่านสำเร็จถึงเป็นของถาวร
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class InventoryPickup : MonoBehaviour, IInteractable
@@ -34,7 +34,12 @@ public class InventoryPickup : MonoBehaviour, IInteractable
         if (def == null)
             return;
 
-        if (def.category == ItemCategory.Ammo || def.category == ItemCategory.Consumable || def.category == ItemCategory.Weapon)
+        // ของที่ใช้ได้ทันทีในด่าน: กระสุน, ของใช้, อาวุธ, ชิป X-Gear ทุกชนิด (Passive ได้ผลทันที / Active เรียกด้วย Command / Map ขึ้น Minimap)
+        bool usableNow = def.category == ItemCategory.Ammo || def.category == ItemCategory.Consumable ||
+                         def.category == ItemCategory.Weapon || def.category == ItemCategory.PassiveChip ||
+                         def.category == ItemCategory.ActiveChip || def.category == ItemCategory.MapData;
+
+        if (usableNow)
         {
             if (PersistentInventory.Instance == null)
                 return;
