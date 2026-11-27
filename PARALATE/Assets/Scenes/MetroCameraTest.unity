@@ -78836,7 +78836,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 0}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 45
+    FieldOfView: 60
     OrthographicSize: 10
     NearClipPlane: 0.05
     FarClipPlane: 5000
@@ -107886,7 +107886,7 @@ MonoBehaviour:
   priority: 0
   blendDistance: 0
   weight: 1
-  sharedProfile: {fileID: 11400000, guid: e500a1f83a78e4e439200c9efc36df56, type: 2}
+  sharedProfile: {fileID: 11400000, guid: a88be944e4229a04cafad105cc88c977, type: 2}
 --- !u!4 &1045245740
 Transform:
   m_ObjectHideFlags: 0
@@ -154126,7 +154126,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 977656330}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 60
+    FieldOfView: 80
     OrthographicSize: 10
     NearClipPlane: 0.1
     FarClipPlane: 5000

@@ -50,6 +50,15 @@ Unity 6000.5 · URP 17.5 (ย้ายจาก HDRP แล้ว) · Cinemachin
   - ห้าม Rebuild ทับ Prefab ที่ผู้ใช้แก้แล้วโดยไม่ถาม; MonoBehaviour ใน Prefab ต้องอยู่ไฟล์ชื่อเดียวกับคลาส
   - หน้าที่ยังสร้างด้วยโค้ดล้วน (`UIBuilder`): UpgradeUI, HudToast (`HudToast.Enabled = false` ปิดทั้งเกม)
 - **Main Menu**: ปุ่ม Load Game เปิด `LoadGamePanel` (Prefab SaveSlots + SaveLoadUI mainMenuMode) ใน Scene MainMenu
+- **ฟิลเตอร์ภาพทั้งเกม** (`Systems/Rendering/`): `ParalateScreenFxFeature` (Renderer Feature ใน Renderer Asset) + Volume Component `ParalateScreenFx` (Grain / Distort / สี / PS1 / Scanline / Vignette / Boost) Shader `Hidden/Paralate/ScreenFx`
+  - ค่าทั้งเกมอยู่ที่ `Assets/DefaultVolumeProfile.asset` > Paralate Screen FX; เฉพาะห้องใช้ Local Volume
+  - โค้ด: `ScreenFx.Pulse(amount, seconds)` / `ScreenFx.SetBoost(0..1)`; ค่าผู้เล่น `ScreenFx.GrainScale` / `DistortionEnabled` (PlayerPrefs, ปรับใน Esc > Setting > Screen)
+  - กล้องที่เรนเดอร์ลง RenderTexture (Minimap) ไม่โดนฟิลเตอร์; `PS1SignalisURP.shader` เก่าไม่ได้ใช้แล้ว
+  - ค่าปัจจุบัน: PSX แบบ King's Field (240 เส้น, 32 ระดับสี, Dither 0.7, ไม่มี Grain/Distort)
+- **Shader Material `Paralate/PSX Lit`** (`ArtAssets/Shader/PSXLit.shader`): Vertex Snap, Affine UV, แสงต่อ Vertex (Forward), Fog, เงาแสงหลัก
+  - กริด Snap = Pixel Height ของ Screen FX (Global `_PSX_GridHeight`) เว้นแต่ตั้ง Snap Resolution ใน Material
+  - แปลง Material: Tools > Paralate > PSX > Convert Selected Materials / ตัวอย่าง `ArtAssets/Material/PSX_Example.mat`
+  - ไม่รับ Lightmap (ใช้ Ambient/Light Probe แทน); ถ้าเปลี่ยน Renderer เป็น Forward+ แสงเสริมจะหาย
 - **เสียง**: `SfxLibrary.Play("ชื่อไฟล์")` จาก `Assets/Resources/Audio/SFX` (ชื่อ `_1.._12` สุ่มอัตโนมัติ, ปรับดังเบาที่ Trims)
 - **Scene**: ชื่อ Scene ตั้งใน `Assets/Resources/SceneFlow.asset`; `SceneLoader` เลือก Scene ใน Inspector
 - **Logs/Memo**: ScriptableObject ใน `Assets/Resources/Logs` (Paralate/Log Entry), ปลดล็อกด้วย `LogUnlockTrigger` หรือ `GameLog.Unlock(id)`

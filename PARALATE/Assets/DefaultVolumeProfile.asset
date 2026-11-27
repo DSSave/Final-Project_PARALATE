@@ -184,6 +184,103 @@ MonoBehaviour:
   texture:
     m_OverrideState: 1
     m_Value: {fileID: 0}
+--- !u!114 &-2506004917510278436
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8359c1f04e38904ba84816d5e7535c5, type: 3}
+  m_Name: ParalateScreenFx
+  m_EditorClassIdentifier: Assembly-CSharp::ParalateScreenFx
+  active: 1
+  masterIntensity:
+    m_OverrideState: 1
+    m_Value: 1
+  grainIntensity:
+    m_OverrideState: 1
+    m_Value: 0
+  grainSize:
+    m_OverrideState: 1
+    m_Value: 1.5
+  grainFps:
+    m_OverrideState: 1
+    m_Value: 24
+  grainShadowResponse:
+    m_OverrideState: 1
+    m_Value: 0.6
+  grainColored:
+    m_OverrideState: 1
+    m_Value: 0
+  waveAmplitude:
+    m_OverrideState: 1
+    m_Value: 0
+  waveFrequency:
+    m_OverrideState: 1
+    m_Value: 3
+  waveSpeed:
+    m_OverrideState: 1
+    m_Value: 0.3
+  edgeWarp:
+    m_OverrideState: 1
+    m_Value: 0
+  jitterChance:
+    m_OverrideState: 1
+    m_Value: 0
+  jitterStrength:
+    m_OverrideState: 1
+    m_Value: 0.006
+  jitterFps:
+    m_OverrideState: 1
+    m_Value: 10
+  jitterBands:
+    m_OverrideState: 1
+    m_Value: 48
+  chromaticAberration:
+    m_OverrideState: 1
+    m_Value: 0
+  saturation:
+    m_OverrideState: 1
+    m_Value: 1
+  contrast:
+    m_OverrideState: 1
+    m_Value: 1
+  tint:
+    m_OverrideState: 1
+    m_Value: {r: 1, g: 1, b: 1, a: 1}
+  ps1Enabled:
+    m_OverrideState: 1
+    m_Value: 1
+  pixelHeight:
+    m_OverrideState: 1
+    m_Value: 240
+  colorLevels:
+    m_OverrideState: 1
+    m_Value: 32
+  dither:
+    m_OverrideState: 1
+    m_Value: 0.7
+  scanline:
+    m_OverrideState: 1
+    m_Value: 0
+  vignette:
+    m_OverrideState: 1
+    m_Value: 0.15
+  boostGrain:
+    m_OverrideState: 1
+    m_Value: 0.15
+  boostWave:
+    m_OverrideState: 1
+    m_Value: 0.006
+  boostJitter:
+    m_OverrideState: 1
+    m_Value: 0.6
+  boostAberration:
+    m_OverrideState: 1
+    m_Value: 0.006
 --- !u!114 &-1545764879180081160
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -275,6 +372,7 @@ MonoBehaviour:
   - {fileID: 4890937507367566264}
   - {fileID: -5264314100843135260}
   - {fileID: 8083885720588126449}
+  - {fileID: -2506004917510278436}
 --- !u!114 &1339302038157889212
 MonoBehaviour:
   m_ObjectHideFlags: 3

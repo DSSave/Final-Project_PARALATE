@@ -24,8 +24,9 @@ MonoBehaviour:
     probeSamplingDebugMesh: {fileID: 0}
     probeSamplingDebugTexture: {fileID: 0}
     probeVolumeBlendStatesCS: {fileID: 0}
-  m_RendererFeatures: []
-  m_RendererFeatureMap: 
+  m_RendererFeatures:
+  - {fileID: 1424366639478931323}
+  m_RendererFeatureMap: 7bff0e78e95dc413
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
   m_AssetVersion: 3
@@ -54,3 +55,19 @@ MonoBehaviour:
   m_AccurateGbufferNormals: 0
   m_IntermediateTextureMode: 1
   m_TileOnlyMode: 0
+--- !u!114 &1424366639478931323
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 61a79d9dc4175f94f9583f44252cf7a4, type: 3}
+  m_Name: Paralate Screen FX
+  m_EditorClassIdentifier: Assembly-CSharp::ParalateScreenFxFeature
+  m_Active: 1
+  shader: {fileID: 4800000, guid: b11e7265535339b4e865e6e88d19157e, type: 3}
+  injectionPoint: 550
+  showInSceneView: 0

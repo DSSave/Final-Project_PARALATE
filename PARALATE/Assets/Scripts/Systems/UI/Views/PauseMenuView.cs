@@ -79,6 +79,11 @@ public class PauseMenuView : MonoBehaviour
     public Slider sfxSlider;
     [Tooltip("ข้อความเตือนตอนไม่มี AudioManager (เริ่มเล่นจากด่านโดยตรง)")]
     public GameObject audioNote;
+    [Tooltip("ความแรง Grain ของฟิลเตอร์ภาพ 0–1 (คูณค่าใน Volume, ScreenFx.GrainScale)")]
+    public Slider grainSlider;
+    [Tooltip("ปุ่มเปิด/ปิดภาพบิดเบี้ยว (ScreenFx.DistortionEnabled)")]
+    public Button distortionButton;
+    public TextMeshProUGUI distortionMark;
 
     [Header("Exit")]
     public Button exitYes;
@@ -442,6 +447,27 @@ public class PauseMenuView : MonoBehaviour
         UIBuilder.Place(note.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, -290f), new Vector2(560f, 60f));
         note.gameObject.SetActive(false);
         view.audioNote = note.gameObject;
+
+        BuildScreenRows(view, page, -430f);
+    }
+
+    /// <summary>
+    /// แถวตั้งค่าภาพ (Film Grain / Screen Distortion) — แยกออกมาให้เติมลง Prefab ที่ผู้ใช้แก้แล้วได้โดยไม่ต้อง Rebuild ทั้งหน้า
+    /// top = ตำแหน่ง y ของหัวข้อ "Screen" (นับจากขอบบนของหน้า)
+    /// </summary>
+    public static void BuildScreenRows(PauseMenuView view, Transform page, float top)
+    {
+        TextMeshProUGUI screenHeader = UIBuilder.Text("ScreenHeader", page, "Screen", 26f);
+        UIBuilder.Place(screenHeader.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, top), new Vector2(220f, 44f));
+
+        view.grainSlider = VolumeRow(page, "Film Grain", top - 60f);
+        view.grainSlider.name = "GrainSlider";
+
+        TextMeshProUGUI distortionLabel = UIBuilder.Text("DistortionLabel", page, "Distortion", 24f);
+        UIBuilder.Place(distortionLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20f, top - 120f), new Vector2(160f, 40f));
+        view.distortionButton = UIBuilder.Button("DistortionCheck", page, "X", null, 26f, new Color(1f, 1f, 1f, 0.18f));
+        UIBuilder.Place((RectTransform)view.distortionButton.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(180f, top - 120f), new Vector2(40f, 40f));
+        view.distortionMark = UIBuilder.LabelOf(view.distortionButton);
     }
 
     private static Slider VolumeRow(Transform page, string label, float y)

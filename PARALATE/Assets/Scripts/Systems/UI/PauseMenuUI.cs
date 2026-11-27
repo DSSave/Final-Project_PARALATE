@@ -11,7 +11,7 @@ using UnityEngine.UI;
 ///   X-Gear    : ซ้าย = รูป X-Gear (คงที่) + คำอธิบาย / ขวา = ชิป Active, Passive, Map ที่มี
 ///   Logs      : แท็บ Log = Memo กดหัวข้อเพื่อเปิดอ่าน (GameLog / Resources/Logs)
 ///               แท็บ Command = สูตรลูกศรของไอเทมที่เคยเก็บแล้ว (CommandBook)
-///   Setting   : Fullscreen + เสียง Main / Music / SFX
+///   Setting   : Fullscreen + เสียง Main / Music / SFX + ภาพ Film Grain / Distortion (ScreenFx)
 ///   Exit      : ถามยืนยัน Yes / No
 ///
 /// หน้าตาอยู่ใน Prefab Resources/UI/PauseMenu (PauseMenuView) ซึ่งวางซ้อนอยู่ใน Prefab MainHUD ด้วย
@@ -202,6 +202,17 @@ public class PauseMenuUI : MonoBehaviour
         });
         BindVolume(view.musicSlider, value => AudioManager.Instance?.SetMusicVolume(value));
         BindVolume(view.sfxSlider, value => AudioManager.Instance?.SetSfxVolume(value));
+
+        // ฟิลเตอร์ภาพ (บันทึกใน PlayerPrefs ทันที ผ่าน ScreenFx)
+        BindVolume(view.grainSlider, value => ScreenFx.GrainScale = value);
+        if (view.distortionButton != null)
+        {
+            view.distortionButton.onClick.AddListener(() =>
+            {
+                ScreenFx.DistortionEnabled = !ScreenFx.DistortionEnabled;
+                if (view.distortionMark != null) view.distortionMark.text = ScreenFx.DistortionEnabled ? "X" : string.Empty;
+            });
+        }
 
         if (view.exitYes != null) view.exitYes.onClick.AddListener(ExitToMainMenu);
         if (view.exitNo != null) view.exitNo.onClick.AddListener(() => SelectPage(Page.Inventory));
@@ -908,6 +919,11 @@ public class PauseMenuUI : MonoBehaviour
         // เริ่ม Play จากด่านโดยตรง (ไม่มี AudioManager จาก MainMenu): คุมได้แค่เสียงรวม
         if (view.audioNote != null)
             view.audioNote.SetActive(!hasAudio);
+
+        if (view.grainSlider != null)
+            view.grainSlider.SetValueWithoutNotify(ScreenFx.GrainScale);
+        if (view.distortionMark != null)
+            view.distortionMark.text = ScreenFx.DistortionEnabled ? "X" : string.Empty;
     }
 
     // ------------------------------------------------------------ Exit

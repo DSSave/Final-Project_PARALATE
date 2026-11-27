@@ -40,7 +40,7 @@ MonoBehaviour:
   active: 1
   intensity:
     m_OverrideState: 1
-    m_Value: 0
+    m_Value: 0.051
   xMultiplier:
     m_OverrideState: 1
     m_Value: 1
@@ -177,7 +177,7 @@ MonoBehaviour:
     m_Value: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 0
+    m_Value: 0.244
   response:
     m_OverrideState: 1
     m_Value: 0.8
@@ -414,7 +414,7 @@ MonoBehaviour:
     m_Value: 4
   chromaticAbberationIntensity:
     m_OverrideState: 1
-    m_Value: 0.5
+    m_Value: 0.109
 --- !u!114 &4890937507367566264
 MonoBehaviour:
   m_ObjectHideFlags: 3
