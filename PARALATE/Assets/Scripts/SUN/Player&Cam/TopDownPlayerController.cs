@@ -148,7 +148,10 @@ public class TopDownPlayerController : MonoBehaviour
     public bool IsMovementLocked => isMovementLocked;
     public bool IsClimbing => isClimbing;
     public bool IsVaulting => isVaulting;
-    public bool IsCrouching => isCrouching;
+    // isCrouching = สถานะที่ผู้เล่นเลือก (ปุ่มย่อสลับค่านี้) / CrouchActive = ย่ออยู่จริงตอนนี้
+    // เล็งปืนบังคับยืน: ระหว่างเล็งถือว่ายืน เลิกเล็งแล้วกลับไปตามที่เลือกไว้ (ย่อก่อนเล็ง → กลับไปย่อ)
+    private bool CrouchActive => isCrouching && !isAiming;
+    public bool IsCrouching => CrouchActive;
     public bool IsAiming => isAiming;
 
     // ห้ามเล็ง (คลิกขวา) แบบมีเจ้าของ เหมือน movementLockOwners: กล้องอิสระที่ Base ใช้ปิดคลิกขวา
@@ -388,7 +391,7 @@ public class TopDownPlayerController : MonoBehaviour
     {
         if (!enablePhysicalCrouch || controller == null) return;
 
-        float targetHeight = isCrouching ? crouchHeight : originalHeight;
+        float targetHeight = CrouchActive ? crouchHeight : originalHeight;
 
         Vector3 targetCenter = originalCenter;
         targetCenter.y = originalCenter.y - ((originalHeight - targetHeight) * 0.5f);
@@ -531,13 +534,13 @@ public class TopDownPlayerController : MonoBehaviour
 
         float currentSpeed = walkSpeed;
 
-        if (isCrouching)
+        if (CrouchActive)
             currentSpeed = crouchSpeed * CrouchSpeedMultiplier;
         else if (isSprinting && !isSprintLocked)
             currentSpeed = Mathf.Lerp(walkSpeed, sprintSpeed, sprintBlend);
 
         // เร่งความเร็ววิ่งทีละนิด (Slow Run → Fast Run) ปล่อยปุ่ม/หยุดเดิน = กลับเป็น 0
-        bool running = isWalking && isSprinting && !isSprintLocked && !isCrouching;
+        bool running = isWalking && isSprinting && !isSprintLocked && !CrouchActive;
         float rate = sprintAccelerationTime > 0f ? Time.deltaTime / sprintAccelerationTime : 1f;
         sprintBlend = running ? Mathf.MoveTowards(sprintBlend, 1f, rate) : 0f;
 
@@ -576,7 +579,7 @@ public class TopDownPlayerController : MonoBehaviour
             playerAudio.HandleFootstep(
                 controller.isGrounded,
                 isSprinting,
-                isCrouching,
+                CrouchActive,
                 currentSpeed);
         }
     }
@@ -1093,7 +1096,7 @@ public class TopDownPlayerController : MonoBehaviour
             return;
 
         animator.SetBool(IsWalkHash, isWalking);
-        animator.SetBool(IsSneakHash, isCrouching);
+        animator.SetBool(IsSneakHash, CrouchActive);
 
         // ท่าวิ่ง: ส่งค่าเฉพาะเมื่อ Animator มีพารามิเตอร์ (ไม่งั้น Unity เตือนทุกเฟรม)
         if (!checkedRunParams)
@@ -1105,7 +1108,7 @@ public class TopDownPlayerController : MonoBehaviour
 
         if (hasRunParams)
         {
-            animator.SetBool(IsRunHash, isWalking && isSprinting && !isSprintLocked && !isCrouching);
+            animator.SetBool(IsRunHash, isWalking && isSprinting && !isSprintLocked && !CrouchActive);
             animator.SetFloat(RunBlendHash, sprintBlend, 0.1f, Time.deltaTime);
         }
     }

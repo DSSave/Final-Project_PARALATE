@@ -196,7 +196,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d8359c1f04e38904ba84816d5e7535c5, type: 3}
   m_Name: ParalateScreenFx
   m_EditorClassIdentifier: Assembly-CSharp::ParalateScreenFx
-  active: 1
+  active: 0
   masterIntensity:
     m_OverrideState: 1
     m_Value: 1
